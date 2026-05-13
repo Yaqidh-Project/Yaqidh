@@ -1,122 +1,142 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Activity, 
-  AlertCircle, 
   Wifi, 
-  WifiOff, 
   Maximize2, 
-  MoreVertical,
-  Baby,
-  Gamepad2,
-  Utensils,
-  BookOpen,
-  Armchair,
-  Trees
+  Camera,
+  CameraOff,
+  RefreshCw
 } from 'lucide-react';
 
-const CameraFeed = ({ name, deviceId, status, activity, type }) => {
-  // Mock current time for the video overlay
+const CameraFeed = ({ name }) => {
   const [time, setTime] = useState(new Date().toLocaleTimeString());
+  const [isStreaming, setIsStreaming] = useState(false);
+  const videoRef = useRef(null);
 
+  // Sync clock for the OSD
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date().toLocaleTimeString()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Select an icon to represent the "view" of the room
-  const getPlaceholderIcon = () => {
-    switch (type) {
-      case 'play': return <Gamepad2 size={48} className="text-slate-600 opacity-20" />;
-      case 'sleep': return <Baby size={48} className="text-slate-600 opacity-20" />;
-      case 'food': return <Utensils size={48} className="text-slate-600 opacity-20" />;
-      case 'class': return <BookOpen size={48} className="text-slate-600 opacity-20" />;
-      case 'living': return <Armchair size={48} className="text-slate-600 opacity-20" />;
-      case 'garden': return <Trees size={48} className="text-slate-600 opacity-20" />;
-      default: return <Activity size={48} className="text-slate-600 opacity-20" />;
+  // Web Cam Handler - Prepared for Backend/Model Integration
+  const toggleWebcam = async () => {
+    if (isStreaming) {
+      const tracks = videoRef.current.srcObject.getTracks();
+      tracks.forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+      setIsStreaming(false);
+    } else {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { width: 1280, height: 720 }, 
+          audio: false 
+        });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          setIsStreaming(true);
+        }
+      } catch (err) {
+        console.error("Error accessing webcam: ", err);
+        alert("Could not access webcam. Please check permissions.");
+      }
     }
   };
 
-  const isOffline = status !== 'active';
-
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-all group">
+    <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden max-w-5xl mx-auto group">
       
-      {/* 1. Video Feed Area (The "Screen") */}
-      <div className={`relative h-48 w-full flex items-center justify-center ${isOffline ? 'bg-slate-900' : 'bg-slate-800'}`}>
+      {/* 1. Video Feed Area */}
+      <div className="relative aspect-video w-full bg-slate-950 flex items-center justify-center">
         
-        {/* Live Overlay UI */}
-        <div className="absolute top-3 left-3 flex items-center gap-2 z-10">
-          <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md bg-black/40 backdrop-blur-sm border border-white/10`}>
-            {isOffline ? (
-               <div className="w-2 h-2 rounded-full bg-red-500"></div>
-            ) : (
-              <>
-                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
-                <span className="text-[10px] font-bold text-white tracking-wider">REC</span>
-              </>
-            )}
-          </div>
+        {/* STANDALONE STATUS INDICATOR */}
+        <div className="absolute top-4 left-4 z-20">
+          {isStreaming ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-600 border border-red-400/50 shadow-lg shadow-red-900/20">
+              <div className="w-2 h-2 rounded-full bg-white animate-pulse"></div>
+              <span className="text-[10px] font-black text-white tracking-widest uppercase">Live</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/80 backdrop-blur-md border border-slate-600/50">
+              <div className="w-2 h-2 rounded-full bg-slate-500"></div>
+              <span className="text-[10px] font-bold text-slate-300 tracking-widest uppercase">Standby</span>
+            </div>
+          )}
         </div>
 
-        <div className="absolute top-3 right-3 z-10">
-           <button className="p-1.5 rounded-md bg-black/40 hover:bg-black/60 text-white/80 transition-colors">
-             <Maximize2 size={14} />
-           </button>
-        </div>
+        {/* Video Element - Model should hook into videoRef.current */}
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          className={`w-full h-full object-cover ${!isStreaming ? 'hidden' : 'block'}`}
+        />
 
-        {/* Center Visual (Simulating the camera view) */}
-        {isOffline ? (
-          <div className="flex flex-col items-center gap-2 text-slate-500">
-            <WifiOff size={32} />
-            <span className="text-xs font-mono uppercase tracking-widest">Signal Lost</span>
+        {/* Mockup Placeholder (Visible when cam is off) */}
+        {!isStreaming && (
+          <div className="flex flex-col items-center gap-4 text-slate-500">
+            <div className="p-6 rounded-full bg-slate-900 border border-slate-800 shadow-inner">
+              <CameraOff size={48} className="opacity-20" />
+            </div>
+            <p className="text-sm font-mono tracking-tighter opacity-50 uppercase">System Armed // No Signal</p>
+            <button 
+              onClick={toggleWebcam}
+              className="mt-2 px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full text-sm font-bold transition-all flex items-center gap-2 shadow-lg shadow-emerald-900/20"
+            >
+              <Camera size={16} /> Initialize Main Room
+            </button>
           </div>
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-700 to-slate-800">
-            {/* This icon acts as the "image" of the room */}
-            {getPlaceholderIcon()}
-            {/* Timestamp Overlay */}
-            <div className="absolute bottom-3 right-3 font-mono text-xs text-white/70 bg-black/40 px-2 py-1 rounded">
+        )}
+
+        {/* OSD (On-Screen Display) Metadata */}
+        {isStreaming && (
+          <>
+            <div className="absolute top-4 right-4 z-20">
+               <button className="p-2 rounded-md bg-black/40 hover:bg-black/60 text-white/80 transition-colors">
+                 <Maximize2 size={16} />
+               </button>
+            </div>
+            <div className="absolute bottom-4 right-4 font-mono text-xs text-white/80 bg-black/40 px-2 py-1 rounded backdrop-blur-sm border border-white/10">
               {new Date().toLocaleDateString()} {time}
             </div>
-             {/* Bitrate/Quality Mockup */}
-             <div className="absolute bottom-3 left-3 font-mono text-[10px] text-emerald-400 bg-black/40 px-2 py-1 rounded flex items-center gap-1">
-              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
-              HD 1080P
+            <div className="absolute bottom-4 left-4 font-mono text-[10px] text-emerald-400 bg-black/40 px-2 py-1 rounded flex items-center gap-1.5 backdrop-blur-sm border border-white/10">
+              <RefreshCw size={10} className="animate-spin" />
+              ANALYSIS ACTIVE: 0.02ms Latency
             </div>
-          </div>
+          </>
         )}
       </div>
 
-      {/* 2. Control Panel (Metadata) */}
-      <div className="p-4">
-        <div className="flex justify-between items-start mb-2">
+      {/* 2. Controls & Metadata */}
+      <div className="p-8 bg-white">
+        <div className="flex justify-between items-center">
           <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-slate-800">{name}</h3>
-              <span className="text-[10px] font-mono text-slate-400 border border-slate-100 px-1 rounded">
-                {deviceId}
-              </span>
-            </div>
-            <p className={`text-xs font-medium mt-1 ${isOffline ? 'text-red-500' : 'text-emerald-600'}`}>
-              {activity}
-            </p>
+            <h3 className="text-3xl font-black text-slate-900 tracking-tight">{name}</h3>
           </div>
-          <button className="text-slate-400 hover:text-slate-600">
-            <MoreVertical size={18} />
-          </button>
-        </div>
-        
-        {/* Status Footer */}
-        <div className="flex items-center justify-between pt-3 mt-2 border-t border-slate-50">
-           <div className="flex items-center gap-1.5">
-              <Wifi size={14} className={isOffline ? 'text-slate-300' : 'text-emerald-500'} />
-              <span className="text-xs text-slate-500">
-                {isOffline ? 'Offline' : 'Excellent (24ms)'}
-              </span>
-           </div>
-           <span className="text-[10px] text-slate-400 font-mono">
-             CAM-{status === 'active' ? 'ON' : 'ERR'}
-           </span>
+          
+          <div className="flex items-center gap-3">
+            {/* The 3-dot button was removed from here */}
+            <button 
+              onClick={toggleWebcam}
+              className={`px-8 py-4 rounded-2xl font-bold transition-all flex items-center gap-3 shadow-sm ${
+                isStreaming 
+                ? 'bg-red-50 text-red-600 hover:bg-red-100' 
+                : 'bg-slate-900 text-white hover:bg-slate-800 shadow-xl shadow-slate-200'
+              }`}
+            >
+              {isStreaming ? (
+                <>
+                  <CameraOff size={20} /> 
+                  Terminate Stream
+                </>
+              ) : (
+                <>
+                  <Camera size={20} /> 
+                  Power On Camera
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -124,109 +144,25 @@ const CameraFeed = ({ name, deviceId, status, activity, type }) => {
 };
 
 export default function LiveMonitoring() {
-  const [cameras, setCameras] = useState([]);
-
-  // Get user role from sessionStorage
-  let role = 'manager';
-  try {
-    const user = JSON.parse(sessionStorage.getItem('user'));
-    if (user && user.role) role = user.role;
-  } catch {}
-
-  useEffect(() => {
-    if (role === 'manager') {
-      setCameras([
-        { 
-          id: 1, 
-          name: 'Main Play Area', 
-          deviceId: 'C-01', 
-          type: 'play',
-          status: 'active', 
-          activity: 'Motion detected' 
-        },
-        { 
-          id: 2, 
-          name: 'Infant Nap Room', 
-          deviceId: 'C-02', 
-          type: 'sleep',
-          status: 'active', 
-          activity: 'No movement detected' // CHANGED: replaced sound level
-        },
-        { 
-          id: 3, 
-          name: 'Dining Hall', 
-          deviceId: 'C-03', 
-          type: 'food',
-          status: 'inactive', 
-          activity: 'NO SIGNAL' 
-        },
-        { 
-          id: 4, 
-          name: 'Classroom 1', 
-          deviceId: 'C-04', 
-          type: 'class',
-          status: 'active', 
-          activity: 'Session in progress' 
-        },
-        { 
-          id: 5, 
-          name: 'Classroom 2', 
-          deviceId: 'C-05', 
-          type: 'class',
-          status: 'active', 
-          activity: 'Empty room' 
-        },
-      ]);
-    } else {
-      // Parent View
-      setCameras([
-        { 
-          id: 1, 
-          name: 'Living Room', 
-          deviceId: 'H-01', 
-          type: 'living',
-          status: 'active', 
-          activity: 'Motion detected' 
-        },
-        { 
-          id: 2, 
-          name: 'Baby\'s Bedroom', 
-          deviceId: 'H-02', 
-          type: 'sleep',
-          status: 'active', 
-          activity: 'Temperature: 22°C' 
-        },
-        { 
-          id: 3, 
-          name: 'Backyard', 
-          deviceId: 'H-03', 
-          type: 'garden',
-          status: 'inactive', 
-          activity: 'Device Offline' 
-        },
-      ]);
-    }
-  }, [role]);
-
-  const activeCount = cameras.filter(c => c.status === 'active').length;
-
   return (
-    <div className="space-y-6">
-      <header className="mb-6">
-        <h2 className="text-3xl font-bold text-slate-800 flex items-center gap-2">
-          <Activity size={32} className="text-emerald-500" />
-          Live Feeds
-        </h2>
-        <p className="text-slate-500 mt-2">
-          System Online • {activeCount} Cameras Active
-        </p>
+    <div className="min-h-screen bg-[#f8fafc] p-8 md:p-12">
+      <header className="max-w-5xl mx-auto mb-10 flex justify-between items-end">
+        <div>
+          <div className="flex items-center gap-2 text-emerald-600 mb-1">
+            <Activity size={20} />
+            <span className="text-xs font-black uppercase tracking-[0.2em]">Live Monitoring</span>
+          </div>
+          <h2 className="text-4xl font-black text-slate-900 tracking-tight">Main Room Feed</h2>
+        </div>
+        <div className="hidden md:flex items-center gap-4 text-slate-400 text-sm font-bold">
+          <div className="flex items-center gap-1.5">
+            <Wifi size={18} className="text-emerald-500" />
+            <span className="uppercase tracking-widest">Signal: Excellent</span>
+          </div>
+        </div>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {cameras.map(camera => (
-          <CameraFeed key={camera.id} {...camera} />
-        ))}
-      </div>
+      <CameraFeed name="Main Room" />
     </div>
   );
 }

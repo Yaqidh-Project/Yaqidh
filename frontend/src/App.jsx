@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
-import LiveMonitoring from './pages/LiveMonitoring';
+import LiveMonitoring from './pages/LiveMonitoring'; // Ensure this points to your new functional file
 import Incidents from './pages/Incidents';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
@@ -18,16 +18,18 @@ const LoginWithError = () => {
   const error = params.get('error');
 
   return (
-    <div>
+    <>
       {error === "invalid" && (
-        <p style={{ color: 'red' }}>Invalid credentials or access not allowed</p>
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-600 text-white px-6 py-2 rounded-full shadow-lg text-sm font-bold">
+          Access Denied: You do not have permission for that section.
+        </div>
       )}
       <Login />
-    </div>
+    </>
   );
 };
 
-// RequireRole component
+// RequireRole component - Controls access to specific pages
 const RequireRole = ({ allowed = [], children }) => {
   let role = null;
   try {
@@ -37,17 +39,17 @@ const RequireRole = ({ allowed = [], children }) => {
   }
 
   if (allowed.length === 0) return children;
-
   if (role && allowed.includes(role)) return children;
 
-  // Redirect to login with error if not allowed
   return <Navigate to="/login?error=invalid" replace />;
 };
 
-// Default redirect after login/register
+// Default redirect logic based on Aliyah's project requirements
 const DefaultRedirect = () => {
-  const role = JSON.parse(sessionStorage.getItem('user'))?.role;
+  const userStr = sessionStorage.getItem('user');
+  if (!userStr) return <Navigate to="/login" replace />;
 
+  const role = JSON.parse(userStr)?.role;
   if (role === "manager" || role === "parent") return <Navigate to="/dashboard" replace />;
   if (role === "teacher") return <Navigate to="/incidents" replace />;
 
@@ -58,87 +60,70 @@ function App() {
   return (
     <Router>
       <Routes>
-
         {/* Auth Routes */}
         <Route path="/login" element={<LoginWithError />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
 
-        {/* Redirect after login/register */}
+        {/* Root Redirect after login/register */}
         <Route path="/" element={<DefaultRedirect />} />
 
-        {/* Protected Routes */}
+        {/* Protected System Routes wrapped in Layout */}
         <Route
           path="/*"
           element={
-            <Layout>
-              <Routes>
+            <RequireRole allowed={["teacher", "manager", "parent"]}>
+              <Layout>
+                <Routes>
+                  {/* Dashboard → Manager & Parent */}
+                  <Route 
+                    path="/dashboard" 
+                    element={
+                      <RequireRole allowed={["manager", "parent"]}>
+                        <Dashboard />
+                      </RequireRole>
+                    } 
+                  />
 
-                {/* Dashboard → Manager & Parent */}
-                <Route 
-                  path="/dashboard" 
-                  element={
-                    <RequireRole allowed={["manager", "parent"]}>
-                      <Dashboard />
-                    </RequireRole>
-                  } 
-                />
+                  {/* Live AI Monitoring → Manager & Parent */}
+                  <Route 
+                    path="/live" 
+                    element={
+                      <RequireRole allowed={["manager", "parent"]}>
+                        <LiveMonitoring />
+                      </RequireRole>
+                    } 
+                  />
 
-                {/* Live Monitoring → Manager & Parent */}
-                <Route 
-                  path="/live" 
-                  element={
-                    <RequireRole allowed={["manager", "parent"]}>
-                      <LiveMonitoring />
-                    </RequireRole>
-                  } 
-                />
+                  {/* Incidents Tracking */}
+                  <Route 
+                    path="/incidents" 
+                    element={<Incidents />} 
+                  />
 
-                {/* Incidents → Teacher, Manager, Parent */}
-                <Route 
-                  path="/incidents" 
-                  element={
-                    <RequireRole allowed={["teacher", "manager", "parent"]}>
-                      <Incidents />
-                    </RequireRole>
-                  } 
-                />
+                  {/* Analytical Reports */}
+                  <Route 
+                    path="/reports" 
+                    element={
+                      <RequireRole allowed={["manager", "parent"]}>
+                        <Reports />
+                      </RequireRole>
+                    } 
+                  />
 
-                {/* Reports → Manager & Parent */}
-                <Route 
-                  path="/reports" 
-                  element={
-                    <RequireRole allowed={["manager", "parent"]}>
-                      <Reports />
-                    </RequireRole>
-                  } 
-                />
+                  {/* System Settings */}
+                  <Route path="/settings" element={<Settings />} />
 
-                {/* Settings → Teacher, Manager, Parent */}
-                <Route 
-                  path="/settings" 
-                  element={
-                    <RequireRole allowed={["teacher", "manager", "parent"]}>
-                      <Settings />
-                    </RequireRole>
-                  } 
-                />
+                  {/* About the System */}
+                  <Route path="/about" element={<About />} />
 
-                {/* About → Teacher, Manager, Parent */}
-                <Route 
-                  path="/about" 
-                  element={
-                    <RequireRole allowed={["teacher", "manager", "parent"]}>
-                      <About />
-                    </RequireRole>
-                  } 
-                />
-
-              </Routes>
-            </Layout>
+                  {/* Fallback for within layout */}
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </Layout>
+            </RequireRole>
           }
         />
-
       </Routes>
     </Router>
   );

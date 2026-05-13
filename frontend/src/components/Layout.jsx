@@ -5,8 +5,16 @@ import { LayoutDashboard, Eye, AlertTriangle, FileText, Settings, Info, LogOut }
 const NavItem = ({ to, icon: Icon, label }) => {
   const location = useLocation();
   const isActive = location.pathname === to;
+
   return (
-    <Link to={to} className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${isActive ? 'bg-brand-100 text-brand-600 font-medium' : 'text-slate-500 hover:bg-slate-50'}`}>
+    <Link 
+      to={to} 
+      className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+        isActive 
+          ? 'bg-brand-500 text-white font-medium shadow-md' 
+          : 'text-slate-500 hover:bg-brand-100 hover:text-brand-500'
+      }`}
+    >
       <Icon size={20} />
       <span>{label}</span>
     </Link>
@@ -14,7 +22,6 @@ const NavItem = ({ to, icon: Icon, label }) => {
 };
 
 export default function Layout({ children }) {
-  // Determine user role for navigation permissions
   let role = null;
   try {
     role = JSON.parse(sessionStorage.getItem('user'))?.role || null;
@@ -26,16 +33,17 @@ export default function Layout({ children }) {
   const navigate = useNavigate();
 
   const handleSignOut = () => {
-    try { sessionStorage.removeItem('user'); } catch (e) {}
+    try { 
+      sessionStorage.removeItem('user'); 
+    } catch (e) {}
     navigate('/login', { replace: true });
   };
 
   return (
     <div className="flex h-screen bg-slate-50">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-slate-100 hidden md:flex flex-col p-6 shadow-sm">
-        <div className="mb-8">
-          <img src="/Yaqidh-logo.png" alt="Yaqidh Logo" className="h-16 w-auto object-contain" />
+      <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col p-6 shadow-sm">
+        <div className="mb-8 flex justify-center">
+          <img src="/Yaqidh-logo.png" alt="Yaqidh Logo" className="h-16 w-auto object-contain mix-blend-multiply" />
         </div>
         
         <nav className="space-y-2 flex-1">
@@ -50,8 +58,7 @@ export default function Layout({ children }) {
           <NavItem to="/about" icon={Info} label="About System" />
           <button
             onClick={handleSignOut}
-            className="w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-slate-500 hover:bg-slate-50"
-            aria-label="Sign out"
+            className="w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-slate-500 hover:bg-red-50 hover:text-red-600"
           >
             <LogOut size={20} />
             <span>Sign Out</span>
@@ -59,7 +66,6 @@ export default function Layout({ children }) {
         </div>
       </aside>
 
-      {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto p-4 md:p-8">
         {children}
       </main>
