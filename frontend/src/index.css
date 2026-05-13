@@ -1,14 +1,22 @@
 @import "tailwindcss";
 
 @theme {
-  --color-brand-50: #fdf2f8;
-  --color-brand-100: #fce7f3;
-  --color-brand-200: #fbcfe8;
-  --color-brand-500: #ec4899;
-  --color-brand-600: #db2777;
-  --color-brand-900: #831843;
-  --color-danger: #ef4444;
-  --color-safe: #10b981;
+  /* Updated to your specific vibrant Navy #06217e */
+  --color-brand-50: #f0f3fa;
+  --color-brand-100: #e0e7f5;
+  --color-brand-500: #06217e; /* This is your new primary color */
+  --color-brand-600: #041656; /* Darker shade for professional hover states */
+  --color-brand-900: #020b2b;
+
+  /* Backgrounds */
+  --color-slate-50: #f9fafb; 
+  --color-slate-200: #e5e7eb;
+
+  /* Semantic Colors */
+  --color-danger: #dc2626; /* Keeps alerts bright red */
+  --color-safe: #059669;
+
+  /* Border Radii for the smooth "Yaqidh" look */
   --radius-xl: 1rem;
   --radius-2xl: 1.5rem;
 }

@@ -200,11 +200,10 @@ const NotificationsTab = () => {
 const ManageCameras = ({ role }) => {
   // Define camera sets
   const managerCameras = [
-    { id: 1, name: 'Main Play Area Cam', ip: '192.168.1.10', zone: 'Play Area', status: 'Online' },
-    { id: 2, name: 'Infant Nap Room', ip: '192.168.1.11', zone: 'Nap Room', status: 'Online' },
-    { id: 3, name: 'Dining Hall', ip: '192.168.1.12', zone: 'Cafeteria', status: 'Offline' },
-    { id: 4, name: 'Classroom 1 Cam', ip: '192.168.1.13', zone: 'Classroom 1', status: 'Online' },
-    { id: 5, name: 'Classroom 2 Cam', ip: '192.168.1.14', zone: 'Classroom 2', status: 'Online' },
+    { id: 1, name: 'Outdoor Playground Cam', ip: '192.168.1.11', zone: 'Outdoor Playground', status: 'Online' },
+    { id: 2, name: 'Classroom A cam', ip: '192.168.1.12', zone: 'Classroom A', status: 'Offline' },
+    { id: 3, name: 'Classroom B cam', ip: '192.168.1.13', zone: 'Classroom B', status: 'Online' },
+    { id: 4, name: 'Classroom C cam', ip: '192.168.1.14', zone: 'Classroom C', status: 'Online' },
   ];
 
   const parentCameras = [
@@ -391,20 +390,19 @@ const UserManagement = () => {
               className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
             <input
-              placeholder="Assigned Zone (e.g., Nap Room)"
+              type="password"
+              placeholder="Temporary Password"
+              value={formData.password}
+              onChange={(e) => setFormData({...formData, password: e.target.value})}
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+            <input
+              placeholder="Assigned Zone"
               value={formData.zone}
               onChange={(e) => setFormData({...formData, zone: e.target.value})}
               className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
-            <select
-              value={formData.role}
-              onChange={(e) => setFormData({...formData, role: e.target.value})}
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
-            >
-              <option value="Teacher">Teacher</option>
-              <option value="Assistant">Assistant</option>
-              <option value="Admin">Admin</option>
-            </select>
+            
           </div>
           <div className="flex gap-2 mt-4">
             <button
@@ -531,7 +529,7 @@ export default function Settings() {
     { key: 'profile', label: 'Profile', show: true },
     { key: 'notifications', label: 'Notifications', show: true },
     { key: 'cameras', label: 'Cameras', show: showCameras },
-    { key: 'users', label: 'Staff', show: showUsers },
+    { key: 'users', label: 'Teacher Management', show: showUsers },
     { key: 'performance', label: 'Analytics', show: showPerformance },
   ];
 

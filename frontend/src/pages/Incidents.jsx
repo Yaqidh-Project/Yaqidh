@@ -1,6 +1,14 @@
-import React, { useState } from 'react';
-import { AlertTriangle, Clock, MapPin, AlertCircle, X, MessageSquare } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { 
+  AlertTriangle, 
+  Clock, 
+  MapPin, 
+  AlertCircle 
+} from 'lucide-react';
 
+/**
+ * Individual Incident Card Component
+ */
 const IncidentCard = ({ incident, onViewDetails }) => (
   <div 
     onClick={() => onViewDetails(incident)}
@@ -8,7 +16,7 @@ const IncidentCard = ({ incident, onViewDetails }) => (
   >
     <div className="flex items-start justify-between mb-4">
       <div className="flex items-start gap-3">
-        {/* Icon Box */}
+        {/* Icon box color logic based on severity */}
         <div className={`p-3 rounded-xl ${
           incident.severity === 'critical' ? 'bg-red-100 text-red-600' : 
           incident.severity === 'warning' ? 'bg-orange-100 text-orange-600' : 
@@ -28,7 +36,7 @@ const IncidentCard = ({ incident, onViewDetails }) => (
         </div>
       </div>
       
-      {/* Right Side: Badge and hard-coded Relative Time */}
+      {/* Right side: Severity badge and relative time */}
       <div className="flex flex-col items-end gap-1">
         <span className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${
           incident.severity === 'critical' ? 'bg-red-100 text-red-600' : 
@@ -38,7 +46,6 @@ const IncidentCard = ({ incident, onViewDetails }) => (
           {incident.severity.charAt(0).toUpperCase() + incident.severity.slice(1)}
         </span>
         
-        {/* Hard-coded printing of the relative time string */}
         <div className="flex items-center gap-1.5 text-slate-400 mt-1">
           <Clock size={14} />
           <span className="text-[13px] font-medium">{incident.relativeTime}</span>
@@ -61,37 +68,95 @@ const IncidentCard = ({ incident, onViewDetails }) => (
 );
 
 export default function Incidents() {
-  const [incidents] = useState([
-    { 
-      id: 1, 
-      type: 'Fall Detected', 
-      severity: 'critical', 
-      location: 'Playground', 
-      time: '2025-12-17 21:58', 
-      relativeTime: 'Just now', // Hard-coded print
-      status: 'active' 
-    },
-    { 
-      id: 2, 
-      type: 'Aggressive Behavior', 
-      severity: 'warning', 
-      location: 'Classroom B', 
-      time: '2025-12-17 21:48', 
-      relativeTime: '10 min ago', // Hard-coded print
-      status: 'resolved' 
-    },
-    { 
-      id: 3, 
-      type: 'Fall Detected', 
-      severity: 'critical', 
-      location: 'Corridor', 
-      time: '2025-12-17 21:43', 
-      relativeTime: '15 min ago', // Hard-coded print
-      status: 'active' 
-    },
-  ]);
-
+  const [incidents, setIncidents] = useState([]);
   const [selectedIncident, setSelectedIncident] = useState(null);
+
+  useEffect(() => {
+    // Get user role from sessionStorage
+    let role = 'manager';
+    try {
+      const user = JSON.parse(sessionStorage.getItem('user'));
+      if (user && user.role) role = user.role;
+    } catch (e) {
+      console.error("Could not parse user role from sessionStorage", e);
+    }
+
+    // Set mock data based on user role
+    if (role === 'manager') {
+      // Manager View: Educational/Facility Locations
+      setIncidents([
+        { 
+          id: 1, 
+          type: 'Fall Detected', 
+          severity: 'critical', 
+          location: 'Playroom A', 
+          time: '2026-5-13 19:00', 
+          relativeTime: 'Just now', 
+          status: 'active' 
+        },
+        { 
+          id: 2, 
+          type: 'Violence Suspicion', 
+          severity: 'warning', 
+          location: 'Classroom B', 
+          time: '2026-5-13 18:40', 
+          relativeTime: '20 min ago', 
+          status: 'active' 
+        },
+        { 
+          id: 3, 
+          type: 'Fall Detected', 
+          severity: 'critical', 
+          location: 'Outdoor Playground', 
+          time: '2026-5-13 18:40', 
+          relativeTime: '20 min ago', 
+          status: 'resolved' 
+        },
+        {
+          id: 4,
+          type: 'Violence Detected',
+          severity: 'critical',
+          location: 'Classroom C',
+          time: '2026-5-13 18:40', 
+          relativeTime: '20 min ago', 
+          status: 'active' 
+        },
+      ]);
+    } else {
+      // Parent View: Home-based Locations
+      setIncidents([
+        { 
+          id: 1, 
+          type: 'Fall Detected', 
+          severity: 'critical', 
+          location: "Baby's Bedroom", 
+          time: '2026-5-13 19:00', 
+          relativeTime: 'Just now', 
+          status: 'active' 
+        },
+        { 
+          id: 2, 
+          type: 'Violence Suspicion', 
+          severity: 'warning', 
+          location: "Living Room", 
+          time: '2026-5-13 18:40', 
+          relativeTime: '20 min ago', 
+          status: 'active' 
+        },
+        { 
+          id: 3, 
+          type: 'Fall Detected', 
+          severity: 'critical', 
+          location: 'Garden / Backyard', 
+          time: '2026-5-13 18:40', 
+          relativeTime: '20 min ago', 
+          status: 'resolved' 
+        },
+      ]);
+    }
+  }, []);
+
+  // Calculate statistics for the dashboard
   const activeSevere = incidents.filter(i => i.status === 'active' && i.severity === 'critical').length;
   const activeWarnings = incidents.filter(i => i.status === 'active' && i.severity === 'warning').length;
 
@@ -105,7 +170,7 @@ export default function Incidents() {
         <p className="text-slate-500 mt-2">Track and manage all security incidents</p>
       </header>
 
-      {/* Original Stats Layout */}
+      {/* Stats Section */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
           <p className="text-slate-500 text-sm mb-2">Total Incidents</p>
@@ -121,6 +186,7 @@ export default function Incidents() {
         </div>
       </div>
 
+      {/* Incidents Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {incidents.map(incident => (
           <IncidentCard key={incident.id} incident={incident} onViewDetails={setSelectedIncident} />
