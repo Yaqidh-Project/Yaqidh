@@ -149,5 +149,21 @@ class ModelInference:
             "stub": False,
         }
 
+    def predict_both(self, image_bytes: bytes, is_video: bool = False) -> dict:
+        """Run both fall and violence detection models in parallel.
+        
+        Returns a dict with combined results from both models.
+        """
+        if not image_bytes:
+            raise ValueError("image_bytes must not be empty")
+
+        fall_result = self.predict("fall_detection", image_bytes, is_video=is_video)
+        violence_result = self.predict("violence_detection", image_bytes, is_video=is_video)
+
+        return {
+            "fall_detection": fall_result,
+            "violence_detection": violence_result,
+        }
+
 
 model_inference = ModelInference()
