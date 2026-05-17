@@ -86,7 +86,9 @@ async def predict(
     clip_path_saved = None
 
     positive_labels = {"fall", "violence"}
-    if label in positive_labels and confidence >= settings.CONFIDENCE_THRESHOLD:
+    # Use model-specific threshold
+    threshold = settings.CONFIDENCE_THRESHOLD if model_name == "fall_detection" else settings.VIOLENCE_CONFIDENCE_THRESHOLD
+    if label in positive_labels and confidence >= threshold:
         from app.models.incident import Incident
 
         danger_category = "fall" if model_name == "fall_detection" else "violence"
@@ -190,7 +192,7 @@ async def detect_both(
     fall_label = fall_result["label"]
     fall_confidence = fall_result["confidence"]
     fall_incident_created = False
-    
+
     positive_labels = {"fall", "violence"}
     if fall_label in positive_labels and fall_confidence >= settings.CONFIDENCE_THRESHOLD:
         cooldown_key = (str(camera_id), "fall")
@@ -258,8 +260,8 @@ async def detect_both(
     violence_label = violence_result["label"]
     violence_confidence = violence_result["confidence"]
     violence_incident_created = False
-    
-    if violence_label in positive_labels and violence_confidence >= settings.CONFIDENCE_THRESHOLD:
+
+    if violence_label in positive_labels and violence_confidence >= settings.VIOLENCE_CONFIDENCE_THRESHOLD:
         cooldown_key = (str(camera_id), "violence")
         now = datetime.now().timestamp()
         last_incident_time = _detection_cooldowns.get(cooldown_key, 0)
