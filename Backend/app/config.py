@@ -12,7 +12,8 @@ class Settings(BaseSettings):
     CLIP_RETENTION_CHECK_INTERVAL: int = 86400
     MODEL_DIR: str = "models"
     CLIPS_DIR: str = "incident_clips"
-    CONFIDENCE_THRESHOLD: float = 0.7
+    CONFIDENCE_THRESHOLD: float = 0.7  # Fall detection threshold
+    VIOLENCE_CONFIDENCE_THRESHOLD: float = 0.4  # Violence detection threshold
     PORT: int = 8000
     OTP_EXPIRE_MINUTES: int = 10
     ECHO_SQL: bool = False
