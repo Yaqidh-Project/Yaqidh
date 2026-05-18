@@ -5,7 +5,6 @@ import numpy as np
 import time
 import logging
 import getpass
-import os
 from collections import deque
 from pathlib import Path
 
@@ -26,7 +25,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent / "Backend" / "models"
 FALL_MODEL_PATH     = str(BASE_DIR / "fall_detection.onnx")
 VIOLENCE_MODEL_PATH = str(BASE_DIR / "violence_detection.onnx")
 
-# Clips saved here — must match the folder mounted in Backend/app/main.py
+# Clips saved here (must match backend CLIPS_DIR setting)
 CLIPS_DIR = Path(__file__).resolve().parent.parent / "Backend" / "incident_clips"
 CLIPS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -39,7 +38,6 @@ FRAME_HEIGHT = 360
 INFERENCE_INTERVAL = 4
 FPS_LIMIT = 30
 
-# Rolling buffer: keep last 5 seconds of frames
 CLIP_BUFFER_SECONDS = 5
 CLIP_BUFFER_MAXLEN  = CLIP_BUFFER_SECONDS * FPS_LIMIT
 
@@ -162,48 +160,47 @@ def load_models():
 # SAVE CLIP FROM BUFFER
 # =========================
 
-def save_clip(frame_buffer: deque, event_type: str) -> tuple[str, str]:
+def save_clip(frame_buffer: deque, event_type: str) -> tuple:
     """
-    Write frames to disk and return (local_path, relative_url).
-
-    - local_path    : full filesystem path, used only for local logging
-    - relative_url  : the value stored in the database, e.g. /incident_clips/fall_20250518_143022.mp4
+    Save rolling buffer as .mp4 file.
+    Returns (local_path, relative_url).
+    relative_url format: /incident_clips/filename.mp4
     """
-    timestamp    = time.strftime("%Y%m%d_%H%M%S")
-    clip_name    = f"{event_type}_{timestamp}.mp4"
-    clip_path    = str(CLIPS_DIR / clip_name)
-    relative_url = f"/incident_clips/{clip_name}"
+    timestamp  = time.strftime("%Y%m%d_%H%M%S")
+    clip_name  = f"{event_type}_{timestamp}.mp4"
+    clip_path  = CLIPS_DIR / clip_name
+    clip_url   = f"/incident_clips/{clip_name}"   # relative URL stored in DB
 
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    writer = cv2.VideoWriter(clip_path, fourcc, FPS_LIMIT, (FRAME_WIDTH, FRAME_HEIGHT))
+    writer = cv2.VideoWriter(str(clip_path), fourcc, FPS_LIMIT, (FRAME_WIDTH, FRAME_HEIGHT))
 
     for f in frame_buffer:
         writer.write(f)
 
     writer.release()
-    logger.info(f"✓ Clip saved locally : {clip_path}")
-    logger.info(f"  DB URL             : {relative_url}")
-    return clip_path, relative_url
+    logger.info(f"✓ Clip saved: {clip_path}")
+    logger.info(f"  DB URL: {clip_url}")
+    return str(clip_path), clip_url
 
 
 # =========================
-# UPDATE INCIDENT WITH CLIP
+# UPDATE INCIDENT CLIP IN DB
 # =========================
 
-def update_incident_clip(incident_id: str, relative_url: str, token: str):
+def update_incident_clip(incident_id: str, clip_url: str, token: str):
     """
     PATCH the incident with the relative clip URL.
-    Only the URL is sent — never a filesystem path.
+    Stores /incident_clips/filename.mp4 — not a full OS path.
     """
     try:
         response = requests.patch(
             f"{API_BASE_URL}/incidents/{incident_id}",
-            json={"incident_clip": relative_url},
+            json={"incident_clip": clip_url},
             headers={"Authorization": f"Bearer {token}"},
             timeout=5,
         )
         if response.status_code == 200:
-            logger.info(f"✓ incident_clip URL saved to DB for incident {incident_id}")
+            logger.info(f"✓ Clip URL saved to DB: {clip_url}")
         else:
             logger.warning(
                 f"Could not update incident clip: "
@@ -219,7 +216,7 @@ def update_incident_clip(incident_id: str, relative_url: str, token: str):
 
 def send_alert(frame, frame_buffer: deque, camera_id: str, token: str, event_type: str):
     try:
-        # Step 1: Send frame to backend for inference + incident creation
+        # Step 1: Send frame → backend creates incident → returns incident_id
         _, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
 
         response = requests.post(
@@ -247,10 +244,10 @@ def send_alert(frame, frame_buffer: deque, camera_id: str, token: str, event_typ
                 f"conf={inc.get('confidence', 0):.2f}"
             )
 
-            # Step 2: Save clip locally, then send only the relative URL to the DB
+            # Step 2: Save clip locally → update DB with relative URL
             if inc_id:
-                _local_path, relative_url = save_clip(frame_buffer, event_type)
-                update_incident_clip(inc_id, relative_url, token)
+                _, clip_url = save_clip(frame_buffer, event_type)
+                update_incident_clip(inc_id, clip_url, token)
 
     except Exception as e:
         logger.error(f"Send error: {e}")
@@ -271,6 +268,7 @@ def run_detection(token: str, camera_id: str, camera_name: str):
     print(f"\n✓ Webcam opened")
     print(f"✓ Camera: {camera_name}")
     print(f"✓ Clips will be saved to: {CLIPS_DIR}")
+    print(f"✓ Access clips via: GET /yaqidh-api/clips/{{incident_id}}")
     print(f"✓ Press 'q' to quit\n")
 
     frame_buffer     = deque(maxlen=CLIP_BUFFER_MAXLEN)
@@ -291,7 +289,6 @@ def run_detection(token: str, camera_id: str, camera_name: str):
         frame_count += 1
         fps_frames  += 1
 
-        # Add to rolling buffer
         frame_buffer.append(frame.copy())
 
         # =========================
@@ -313,10 +310,6 @@ def run_detection(token: str, camera_id: str, camera_name: str):
 
         prev_frame = gray
 
-        # =========================
-        # DEFAULTS
-        # =========================
-
         fall_conf         = 0.0
         violence_conf     = 0.0
         fall_detected     = False
@@ -331,7 +324,6 @@ def run_detection(token: str, camera_id: str, camera_name: str):
             fall_results     = fall_model(frame,     imgsz=640, conf=0.4, verbose=False)
             violence_results = violence_model(frame, imgsz=640, conf=0.4, verbose=False)
 
-            # FALL PARSING
             for r in fall_results:
                 if r.boxes is not None:
                     boxes  = r.boxes.xyxy.cpu().numpy()
@@ -348,7 +340,6 @@ def run_detection(token: str, camera_id: str, camera_name: str):
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2
                             )
 
-            # VIOLENCE PARSING
             for r in violence_results:
                 if r.boxes is not None:
                     boxes  = r.boxes.xyxy.cpu().numpy()
@@ -365,7 +356,6 @@ def run_detection(token: str, camera_id: str, camera_name: str):
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2
                             )
 
-            # TEMPORAL VERIFICATION
             if fall_detected and motion_detected:
                 fall_counter += 1
             else:
@@ -376,7 +366,6 @@ def run_detection(token: str, camera_id: str, camera_name: str):
             else:
                 violence_counter = 0
 
-            # SEND ALERT
             if fall_counter >= FALL_THRESHOLD:
                 send_alert(frame, frame_buffer, camera_id, token, "fall")
                 fall_counter = 0
@@ -386,7 +375,7 @@ def run_detection(token: str, camera_id: str, camera_name: str):
                 violence_counter = 0
 
         # =========================
-        # FPS
+        # FPS + OVERLAY
         # =========================
 
         current_time = time.time()
@@ -395,34 +384,16 @@ def run_detection(token: str, camera_id: str, camera_name: str):
             fps_frames = 0
             fps_clock  = current_time
 
-        # =========================
-        # OVERLAY
-        # =========================
-
-        cv2.putText(
-            frame, f"FPS: {fps_actual:.1f}",
-            (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2
-        )
-
-        cv2.putText(
-            frame, f"Motion Score: {motion_score}",
-            (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 165, 255), 2
-        )
-
-        cv2.putText(
-            frame, f"Fall Counter: {fall_counter}/{FALL_THRESHOLD}",
-            (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2
-        )
-
-        cv2.putText(
-            frame, f"Violence Counter: {violence_counter}/{VIOLENCE_THRESHOLD}",
-            (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2
-        )
-
-        cv2.putText(
-            frame, f"Camera: {camera_name}",
-            (10, FRAME_HEIGHT - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1
-        )
+        cv2.putText(frame, f"FPS: {fps_actual:.1f}",
+                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+        cv2.putText(frame, f"Motion Score: {motion_score}",
+                    (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 165, 255), 2)
+        cv2.putText(frame, f"Fall Counter: {fall_counter}/{FALL_THRESHOLD}",
+                    (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        cv2.putText(frame, f"Violence Counter: {violence_counter}/{VIOLENCE_THRESHOLD}",
+                    (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+        cv2.putText(frame, f"Camera: {camera_name}",
+                    (10, FRAME_HEIGHT - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
 
         cv2.imshow("Yaqidh Real-time Detection", frame)
 
