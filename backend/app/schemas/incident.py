@@ -33,3 +33,4 @@ class IncidentOut(BaseModel):
     detections: Optional[Union[dict[str, Any], list[dict[str, Any]]]] = None
 
     model_config = {"from_attributes": True}
+    
