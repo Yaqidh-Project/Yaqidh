@@ -1,4 +1,5 @@
 import uuid
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -16,6 +17,12 @@ router = APIRouter(
     tags=["incidents"],
     dependencies=[Depends(require_phone_verified)],
 )
+
+
+def _normalize_incident_clip(value: str | None) -> str | None:
+    if value is None:
+        return None
+    return f"/incident_clips/{Path(value).name}"
 
 
 async def _get_zone_users(camera_id: uuid.UUID, db: AsyncSession) -> list[uuid.UUID]:
@@ -56,7 +63,9 @@ async def create_incident(
 
     await _assert_camera_access(current_user, payload.camera_id, db)
 
-    incident = Incident(**payload.model_dump())
+    incident_data = payload.model_dump()
+    incident_data["incident_clip"] = _normalize_incident_clip(incident_data.get("incident_clip"))
+    incident = Incident(**incident_data)
     db.add(incident)
     await db.flush()
     await db.refresh(incident)
@@ -123,18 +132,33 @@ async def get_incident(
     return incident
 
 
+async def _assert_incident_access(user: User, incident: Incident, db: AsyncSession) -> None:
+    if user.role_name == "Manager":
+        return
+    if not incident.camera_id:
+        raise HTTPException(status_code=403, detail="Access denied to this incident")
+    user_ids = await _get_zone_users(incident.camera_id, db)
+    if user.user_id not in user_ids:
+        raise HTTPException(status_code=403, detail="Access denied to this incident")
+
+
 @router.patch("/{incident_id}", response_model=IncidentOut)
 async def update_incident(
     incident_id: uuid.UUID,
     payload: IncidentUpdate,
-    current_user: User = Depends(require_roles("Manager")),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Incident).where(Incident.incident_id == incident_id))
     incident = result.scalar_one_or_none()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
+
+    await _assert_incident_access(current_user, incident, db)
+
     for field, value in payload.model_dump(exclude_none=True).items():
+        if field == "incident_clip":
+            value = _normalize_incident_clip(value)
         setattr(incident, field, value)
     await db.flush()
     await db.refresh(incident)
