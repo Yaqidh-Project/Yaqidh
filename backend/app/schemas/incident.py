@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from pydantic import BaseModel
-from typing import Optional, Any
+from typing import Optional, Any, Union
 from app.models.enums import IncidentCategory, IncidentType
 
 
@@ -12,13 +12,13 @@ class IncidentCreate(BaseModel):
     incident_clip: Optional[str] = None
     confidence: Optional[float] = None
     status: str = "open"
-    detections: Optional[list[dict[str, Any]]] = None
+    detections: Optional[Union[dict[str, Any], list[dict[str, Any]]]] = None
 
 
 class IncidentUpdate(BaseModel):
     status: Optional[str] = None
     incident_clip: Optional[str] = None
-    detections: Optional[list[dict[str, Any]]] = None
+    detections: Optional[Union[dict[str, Any], list[dict[str, Any]]]] = None
 
 
 class IncidentOut(BaseModel):
@@ -30,6 +30,6 @@ class IncidentOut(BaseModel):
     status: str
     camera_id: Optional[uuid.UUID] = None
     confidence: Optional[float] = None
-    detections: Optional[list[dict[str, Any]]] = None
+    detections: Optional[Union[dict[str, Any], list[dict[str, Any]]]] = None
 
     model_config = {"from_attributes": True}
