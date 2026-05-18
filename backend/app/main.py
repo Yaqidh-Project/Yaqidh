@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.services.inference import model_inference
 from app.services.retention import retention_loop
-from app.routers import auth, users, zones, cameras, incidents, reports, inference, websocket
+from app.routers import auth, users, zones, cameras, incidents, reports, inference, websocket, clips
 from app.routers import manager as manager_router
 from app.services.notifications import manager as ws_manager
 
@@ -64,6 +64,7 @@ app.include_router(cameras.router)
 app.include_router(incidents.router)
 app.include_router(reports.router)
 app.include_router(inference.router)
+app.include_router(clips.router)
 app.include_router(websocket.router)
 
 

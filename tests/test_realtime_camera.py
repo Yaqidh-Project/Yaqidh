@@ -1,26 +1,13 @@
-"""
-Real-time camera testing script for Yaqidh AI safety system.
-
-Captures frames from webcam, sends to backend /inference/detect endpoint,
-visualizes detection results with OpenCV overlays, and logs full detection flow.
-
-IMPORTANT:
-- Uses backend detection as single source of truth
-- Visualization and temporal counters are for testing/debugging only
-- Does NOT duplicate backend detection logic
-"""
-
+from ultralytics import YOLO
 import cv2
 import requests
 import numpy as np
 import time
-import uuid
-import sys
-import json
 import logging
+import getpass
+import os
+from collections import deque
 from pathlib import Path
-from typing import Optional, Dict, Any
-from datetime import datetime
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,479 +15,431 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Configuration
-API_BASE_URL = "http://localhost:8000/yaqidh-api"
-INFERENCE_ENDPOINT = f"{API_BASE_URL}/inference/detect"
-HEALTH_ENDPOINT = f"{API_BASE_URL}/health"
+# =========================
+# CONFIG
+# =========================
 
-# Frame processing
-FRAME_WIDTH = 640
-FRAME_HEIGHT = 480
-INFERENCE_INTERVAL = 2  # Run inference every N frames
+API_BASE_URL = "http://127.0.0.1:8000/yaqidh-api"
+REPORT_ENDPOINT = f"{API_BASE_URL}/inference/detect"
+
+BASE_DIR = Path(__file__).resolve().parent.parent / "Backend" / "models"
+FALL_MODEL_PATH     = str(BASE_DIR / "fall_detection.onnx")
+VIOLENCE_MODEL_PATH = str(BASE_DIR / "violence_detection.onnx")
+
+# Clips saved here — must match the folder mounted in Backend/app/main.py
+CLIPS_DIR = Path(__file__).resolve().parent.parent / "Backend" / "incident_clips"
+CLIPS_DIR.mkdir(parents=True, exist_ok=True)
+
+# =========================
+# VIDEO SETTINGS
+# =========================
+
+FRAME_WIDTH  = 480
+FRAME_HEIGHT = 360
+INFERENCE_INTERVAL = 4
 FPS_LIMIT = 30
 
-# Temporal verification thresholds (for visualization only)
-FALL_THRESHOLD = 3
+# Rolling buffer: keep last 5 seconds of frames
+CLIP_BUFFER_SECONDS = 5
+CLIP_BUFFER_MAXLEN  = CLIP_BUFFER_SECONDS * FPS_LIMIT
+
+# =========================
+# THRESHOLDS
+# =========================
+
+FALL_CONFIDENCE_THRESHOLD     = 0.7
+VIOLENCE_CONFIDENCE_THRESHOLD = 0.4
+FALL_THRESHOLD     = 3
 VIOLENCE_THRESHOLD = 3
 
-# Confidence thresholds (matching backend)
-FALL_CONFIDENCE_THRESHOLD = 0.7
-VIOLENCE_CONFIDENCE_THRESHOLD = 0.4
 
-# Auth credentials for testing
-# These should match a user in your database
-TEST_EMAIL = "test@example.com"
-TEST_PASSWORD = "test-password"
-TEST_CAMERA_ID = None  # Will be set from user input or config
+# =========================
+# AUTH — LOGIN
+# =========================
 
+def login() -> tuple:
+    print("\n" + "="*50)
+    print("  Yaqidh Real-time Detection")
+    print("="*50)
 
-class DetectionState:
-    """Tracks detection state for visualization."""
+    while True:
+        email    = input("\nEnter email: ").strip()
+        password = getpass.getpass("Enter password: ")
 
-    def __init__(self):
-        self.fall_counter = 0
-        self.violence_counter = 0
-        self.last_fall_detection = None
-        self.last_violence_detection = None
-        self.motion_score = 0.0
-        self.prev_frame = None
+        try:
+            response = requests.post(
+                f"{API_BASE_URL}/auth/login",
+                json={"email": email, "password": password},
+                timeout=5,
+            )
 
+            if response.status_code == 200:
+                data  = response.json()
+                token = data.get("access_token")
+                role  = data.get("role", "Unknown")
+                logger.info(f"✓ Authenticated as {email} (role: {role})")
+                return token, role
 
-def calculate_motion_score(frame: np.ndarray, prev_frame: Optional[np.ndarray]) -> float:
-    """Calculate motion score using frame differencing."""
-    if prev_frame is None:
-        return 0.0
+            elif response.status_code == 401:
+                print("✗ Invalid email or password. Try again.\n")
 
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    gray_prev = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
-
-    diff = cv2.absdiff(gray, gray_prev)
-    motion = np.sum(diff) / (frame.shape[0] * frame.shape[1]) / 255.0
-    return min(motion, 1.0)
-
-
-def draw_detection_boxes(
-    frame: np.ndarray,
-    fall_detection: Dict[str, Any],
-    violence_detection: Dict[str, Any]
-) -> np.ndarray:
-    """Draw bounding boxes from backend detection response."""
-
-    # Backend detection dicts contain: label, confidence, and optionally boxes
-    # Only draw if backend provided box coordinates
-
-    for detection_type, detection in [("fall", fall_detection), ("violence", violence_detection)]:
-        if not detection or detection.get("label") == "no_detection":
-            continue
-
-        # Check if backend provided bounding box data
-        if "boxes" in detection and detection["boxes"]:
-            boxes = detection["boxes"]
-            if isinstance(boxes, list) and len(boxes) > 0:
-                for box in boxes:
-                    if isinstance(box, (list, tuple)) and len(box) >= 4:
-                        x1, y1, x2, y2 = box[:4]
-                        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-
-                        # Draw rectangle
-                        color = (0, 0, 255) if detection_type == "fall" else (255, 0, 0)
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-
-                        # Draw label with confidence
-                        label = f"{detection_type.upper()}: {detection['confidence']:.2f}"
-                        cv2.putText(
-                            frame, label,
-                            (x1, y1 - 5),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2
-                        )
-
-    return frame
-
-
-def draw_overlay_text(
-    frame: np.ndarray,
-    state: DetectionState,
-    fps_actual: float,
-    fall_confidence: float = 0.0,
-    violence_confidence: float = 0.0
-) -> np.ndarray:
-    """Draw real-time visualization overlays on frame.
-
-    Uses actual confidence thresholds:
-    - Fall: 0.7
-    - Violence: 0.4
-    """
-
-    # FPS
-    cv2.putText(
-        frame, f"FPS: {fps_actual:.1f}",
-        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2
-    )
-
-    # Motion Score
-    cv2.putText(
-        frame, f"Motion Score: {state.motion_score:.2f}",
-        (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 165, 255), 2
-    )
-
-    # Temporal Verification - Fall Counter (only if confidence >= 0.7)
-    if fall_confidence >= FALL_CONFIDENCE_THRESHOLD:
-        cv2.putText(
-            frame, f"Fall Counter: {state.fall_counter}/{FALL_THRESHOLD}",
-            (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2
-        )
-    else:
-        cv2.putText(
-            frame, f"Fall Counter: 0/{FALL_THRESHOLD}",
-            (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (128, 128, 128), 2
-        )
-
-    # Temporal Verification - Violence Counter (only if confidence >= 0.4)
-    if violence_confidence >= VIOLENCE_CONFIDENCE_THRESHOLD:
-        cv2.putText(
-            frame, f"Violence Counter: {state.violence_counter}/{VIOLENCE_THRESHOLD}",
-            (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2
-        )
-    else:
-        cv2.putText(
-            frame, f"Violence Counter: 0/{VIOLENCE_THRESHOLD}",
-            (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (128, 128, 128), 2
-        )
-
-    # Fall Detection Confidence (only if >= 0.7)
-    if fall_confidence >= FALL_CONFIDENCE_THRESHOLD:
-        cv2.putText(
-            frame, f"Fall: {fall_confidence:.2f} ✓",
-            (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2
-        )
-    else:
-        cv2.putText(
-            frame, f"Fall: {fall_confidence:.2f}",
-            (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (128, 128, 128), 2
-        )
-
-    # Violence Detection Confidence (only if >= 0.4)
-    if violence_confidence >= VIOLENCE_CONFIDENCE_THRESHOLD:
-        cv2.putText(
-            frame, f"Violence: {violence_confidence:.2f} ✓",
-            (10, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2
-        )
-    else:
-        cv2.putText(
-            frame, f"Violence: {violence_confidence:.2f}",
-            (10, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (128, 128, 128), 2
-        )
-
-    return frame
-
-
-def get_auth_token(email: str, password: str) -> Optional[str]:
-    """Authenticate with backend and get JWT token."""
-    try:
-        login_url = f"{API_BASE_URL}/auth/login"
-        response = requests.post(
-            login_url,
-            json={"email": email, "password": password},
-            timeout=5
-        )
-
-        if response.status_code == 200:
-            token_data = response.json()
-            token = token_data.get("access_token")
-            if token:
-                logger.info(f"✓ Authenticated as {email}")
-                return token
             else:
-                logger.error("No token in response")
-                return None
-        elif response.status_code == 401:
-            logger.error(f"Authentication failed - invalid credentials for {email}")
-            return None
-        else:
-            logger.error(f"Login failed: {response.status_code} - {response.text}")
-            return None
+                print(f"✗ Login failed: {response.status_code} — {response.text}")
+                print("  Try again.\n")
 
-    except Exception as e:
-        logger.error(f"Authentication error: {e}")
-        return None
+        except Exception as e:
+            print(f"✗ Cannot reach backend: {e}")
+            print("  Make sure the backend is running on http://127.0.0.1:8000\n")
 
 
-def verify_backend_connectivity() -> bool:
-    """Verify that backend API is accessible."""
+# =========================
+# CAMERA SELECTION
+# =========================
+
+def select_camera(token: str, role: str) -> tuple:
     try:
-        response = requests.get(HEALTH_ENDPOINT, timeout=5)
-        if response.status_code == 200:
-            health_data = response.json()
-            logger.info(f"Backend health: {health_data}")
-
-            if not health_data.get("fall_model_loaded") or not health_data.get("violence_model_loaded"):
-                logger.warning("Models not fully loaded on backend")
-                return True  # Continue anyway, models may load later
-
-            return True
-    except Exception as e:
-        logger.error(f"Backend connectivity check failed: {e}")
-        return False
-
-
-def send_frame_for_inference(
-    frame: np.ndarray,
-    camera_id: str,
-    token: str
-) -> Optional[Dict[str, Any]]:
-    """Send frame to backend /inference/detect endpoint."""
-
-    try:
-        # Encode frame as JPEG
-        _, jpeg_data = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
-
-        # Prepare multipart form data
-        files = {
-            'frame': ('frame.jpg', jpeg_data.tobytes(), 'image/jpeg')
-        }
-        data = {
-            'camera_id': camera_id
-        }
-        headers = {
-            'Authorization': f'Bearer {token}'
-        }
-
-        response = requests.post(
-            INFERENCE_ENDPOINT,
-            files=files,
-            data=data,
-            headers=headers,
-            timeout=10
+        response = requests.get(
+            f"{API_BASE_URL}/cameras",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=5,
         )
 
-        if response.status_code == 200:
-            return response.json()
-        elif response.status_code == 401:
-            logger.error("Authentication failed - check your token")
-            return None
-        else:
-            logger.warning(f"Inference request failed: {response.status_code} - {response.text}")
-            return None
+        if response.status_code != 200:
+            logger.warning(f"Could not fetch cameras: {response.status_code}")
+            camera_id = input("\nEnter camera ID manually: ").strip()
+            return camera_id, "Manual"
 
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to send frame for inference: {e}")
-        return None
+        cameras = response.json()
 
+        if not cameras:
+            logger.warning("No cameras found in database.")
+            camera_id = input("\nEnter camera ID manually: ").strip()
+            return camera_id, "Manual"
 
-def log_detection_results(
-    response: Dict[str, Any],
-    frame_num: int
-) -> None:
-    """Log detection results in structured format."""
+        print("\nAvailable cameras:")
+        for i, cam in enumerate(cameras, 1):
+            cam_id   = cam.get("camera_id", "?")
+            cam_name = cam.get("camera_name", "Unknown")
+            zone_id  = cam.get("zone_id", "?")
+            status   = cam.get("status", "?")
+            print(f"  [{i}] {cam_name}  (zone: {zone_id})  status: {status}")
+            print(f"       ID: {cam_id}")
 
-    fall = response.get("fall_detection", {})
-    violence = response.get("violence_detection", {})
-    incident_created = response.get("incident_created", False)
-    incidents = response.get("incidents", [])
+        while True:
+            try:
+                choice = input(f"\nSelect camera number [1-{len(cameras)}]: ").strip()
+                idx    = int(choice) - 1
+                if 0 <= idx < len(cameras):
+                    selected = cameras[idx]
+                    cam_id   = selected.get("camera_id")
+                    cam_name = selected.get("camera_name", "Unknown")
+                    logger.info(f"✓ Using camera: {cam_name} (ID: {cam_id})")
+                    return cam_id, cam_name
+                else:
+                    print(f"  Please enter a number between 1 and {len(cameras)}")
+            except ValueError:
+                print("  Please enter a valid number")
 
-    logger.info(f"\n{'='*60}")
-    logger.info(f"Frame #{frame_num} - Detection Results")
-    logger.info(f"{'='*60}")
-
-    # Fall Detection
-    logger.info(f"Fall Detection: label={fall.get('label')}, "
-                f"confidence={fall.get('confidence', 0):.2f}")
-
-    # Violence Detection
-    logger.info(f"Violence Detection: label={violence.get('label')}, "
-                f"confidence={violence.get('confidence', 0):.2f}")
-
-    # Incident Status
-    logger.info(f"Incident Created: {incident_created}")
-
-    # Incidents List
-    if incidents:
-        logger.info(f"Created Incidents ({len(incidents)}):")
-        for inc in incidents:
-            logger.info(f"  - ID: {inc.get('incident_id')}, "
-                       f"Category: {inc.get('danger_category')}, "
-                       f"Type: {inc.get('incident_type')}, "
-                       f"Confidence: {inc.get('confidence', 0):.2f}")
-
-    logger.info(f"{'='*60}\n")
+    except Exception as e:
+        logger.error(f"Error fetching cameras: {e}")
+        camera_id = input("\nEnter camera ID manually: ").strip()
+        return camera_id, "Manual"
 
 
-def update_temporal_counters(
-    state: DetectionState,
-    fall_label: str,
-    fall_confidence: float,
-    violence_label: str,
-    violence_confidence: float
-) -> None:
-    """Update temporal verification counters based on detection results and thresholds.
+# =========================
+# LOAD MODELS
+# =========================
 
-    Fall threshold: 0.7
-    Violence threshold: 0.4
+def load_models():
+    logger.info("Loading models...")
+    fall_model     = YOLO(FALL_MODEL_PATH,     task="detect")
+    violence_model = YOLO(VIOLENCE_MODEL_PATH, task="detect")
+    logger.info("✓ Models loaded successfully")
+    return fall_model, violence_model
+
+
+# =========================
+# SAVE CLIP FROM BUFFER
+# =========================
+
+def save_clip(frame_buffer: deque, event_type: str) -> tuple[str, str]:
     """
+    Write frames to disk and return (local_path, relative_url).
 
-    # Fall detection - update counter only if confidence >= 0.7
-    if fall_label == "fall" and fall_confidence >= 0.7:
-        state.fall_counter = min(state.fall_counter + 1, FALL_THRESHOLD)
-    else:
-        state.fall_counter = 0
+    - local_path    : full filesystem path, used only for local logging
+    - relative_url  : the value stored in the database, e.g. /incident_clips/fall_20250518_143022.mp4
+    """
+    timestamp    = time.strftime("%Y%m%d_%H%M%S")
+    clip_name    = f"{event_type}_{timestamp}.mp4"
+    clip_path    = str(CLIPS_DIR / clip_name)
+    relative_url = f"/incident_clips/{clip_name}"
 
-    # Violence detection - update counter only if confidence >= 0.4
-    if violence_label == "violence" and violence_confidence >= 0.4:
-        state.violence_counter = min(state.violence_counter + 1, VIOLENCE_THRESHOLD)
-    else:
-        state.violence_counter = 0
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = cv2.VideoWriter(clip_path, fourcc, FPS_LIMIT, (FRAME_WIDTH, FRAME_HEIGHT))
+
+    for f in frame_buffer:
+        writer.write(f)
+
+    writer.release()
+    logger.info(f"✓ Clip saved locally : {clip_path}")
+    logger.info(f"  DB URL             : {relative_url}")
+    return clip_path, relative_url
 
 
-def run_realtime_detection(camera_id: str, token: str) -> None:
-    """Main real-time detection loop."""
+# =========================
+# UPDATE INCIDENT WITH CLIP
+# =========================
 
-    # Verify backend connectivity first
-    if not verify_backend_connectivity():
-        logger.error("Cannot connect to backend. Ensure it's running on http://localhost:8000")
-        logger.error(f"Trying to reach: {HEALTH_ENDPOINT}")
-        sys.exit(1)
+def update_incident_clip(incident_id: str, relative_url: str, token: str):
+    """
+    PATCH the incident with the relative clip URL.
+    Only the URL is sent — never a filesystem path.
+    """
+    try:
+        response = requests.patch(
+            f"{API_BASE_URL}/incidents/{incident_id}",
+            json={"incident_clip": relative_url},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=5,
+        )
+        if response.status_code == 200:
+            logger.info(f"✓ incident_clip URL saved to DB for incident {incident_id}")
+        else:
+            logger.warning(
+                f"Could not update incident clip: "
+                f"{response.status_code} {response.text}"
+            )
+    except Exception as e:
+        logger.error(f"Clip update error: {e}")
 
-    # Open webcam
+
+# =========================
+# SEND ALERT TO BACKEND
+# =========================
+
+def send_alert(frame, frame_buffer: deque, camera_id: str, token: str, event_type: str):
+    try:
+        # Step 1: Send frame to backend for inference + incident creation
+        _, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+
+        response = requests.post(
+            REPORT_ENDPOINT,
+            files={"frame": ("frame.jpg", buf.tobytes(), "image/jpeg")},
+            data={"camera_id": camera_id},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
+
+        if response.status_code != 200:
+            logger.warning(f"Alert failed {response.status_code}: {response.text}")
+            return
+
+        result = response.json()
+        logger.info(f"✓ Alert sent successfully")
+        logger.info(f"  Incident created: {result.get('incident_created', False)}")
+
+        incidents = result.get("incidents") or []
+        for inc in incidents:
+            inc_id = inc.get("incident_id")
+            logger.info(
+                f"  ⚠️  {str(inc.get('danger_category', '')).upper()} "
+                f"ID={inc_id} "
+                f"conf={inc.get('confidence', 0):.2f}"
+            )
+
+            # Step 2: Save clip locally, then send only the relative URL to the DB
+            if inc_id:
+                _local_path, relative_url = save_clip(frame_buffer, event_type)
+                update_incident_clip(inc_id, relative_url, token)
+
+    except Exception as e:
+        logger.error(f"Send error: {e}")
+
+
+# =========================
+# MAIN DETECTION LOOP
+# =========================
+
+def run_detection(token: str, camera_id: str, camera_name: str):
+    fall_model, violence_model = load_models()
+
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
-        logger.error("Failed to open webcam")
-        sys.exit(1)
+        logger.error("Cannot open webcam")
+        return
 
-    # Set resolution
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_WIDTH)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
+    print(f"\n✓ Webcam opened")
+    print(f"✓ Camera: {camera_name}")
+    print(f"✓ Clips will be saved to: {CLIPS_DIR}")
+    print(f"✓ Press 'q' to quit\n")
 
-    state = DetectionState()
-    frame_count = 0
-    fps_clock = time.time()
-    fps_frames = 0
-    fps_actual = 0
+    frame_buffer     = deque(maxlen=CLIP_BUFFER_MAXLEN)
+    prev_frame       = None
+    fall_counter     = 0
+    violence_counter = 0
+    frame_count      = 0
+    fps_frames       = 0
+    fps_actual       = 0.0
+    fps_clock        = time.time()
 
-    logger.info(f"Starting real-time detection loop for camera {camera_id}")
-    logger.info(f"Press 'q' to exit, 'p' to pause/resume, 's' to save frame")
-    logger.info(f"Backend: {API_BASE_URL}")
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
 
-    try:
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                logger.error("Failed to read frame from webcam")
-                break
+        frame = cv2.resize(frame, (FRAME_WIDTH, FRAME_HEIGHT))
+        frame_count += 1
+        fps_frames  += 1
 
-            frame_count += 1
-            fps_frames += 1
+        # Add to rolling buffer
+        frame_buffer.append(frame.copy())
 
-            # Resize frame
-            frame = cv2.resize(frame, (FRAME_WIDTH, FRAME_HEIGHT))
+        # =========================
+        # MOTION DETECTION
+        # =========================
 
-            # Calculate motion score
-            state.motion_score = calculate_motion_score(frame, state.prev_frame)
-            state.prev_frame = frame.copy()
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        gray = cv2.GaussianBlur(gray, (11, 11), 0)
 
-            # Run inference every N frames
-            fall_confidence = 0.0
-            violence_confidence = 0.0
+        motion_detected = False
+        motion_score    = 0
 
-            if frame_count % INFERENCE_INTERVAL == 0:
-                logger.info(f"Sending frame {frame_count} for inference...")
-                response = send_frame_for_inference(frame, camera_id, token)
+        if prev_frame is not None:
+            frame_diff   = cv2.absdiff(prev_frame, gray)
+            thresh       = cv2.threshold(frame_diff, 25, 255, cv2.THRESH_BINARY)[1]
+            motion_score = np.sum(thresh)
+            if motion_score > 50000:
+                motion_detected = True
 
-                if response:
-                    fall = response.get("fall_detection", {})
-                    violence = response.get("violence_detection", {})
+        prev_frame = gray
 
-                    fall_label = fall.get("label", "no_detection")
-                    violence_label = violence.get("label", "no_detection")
-                    fall_confidence = fall.get("confidence", 0.0)
-                    violence_confidence = violence.get("confidence", 0.0)
+        # =========================
+        # DEFAULTS
+        # =========================
 
-                    # Log full detection flow
-                    log_detection_results(response, frame_count)
+        fall_conf         = 0.0
+        violence_conf     = 0.0
+        fall_detected     = False
+        violence_detected = False
 
-                    # Update temporal counters (pass confidence values to respect thresholds)
-                    update_temporal_counters(state, fall_label, fall_confidence, violence_label, violence_confidence)
+        # =========================
+        # RUN INFERENCE
+        # =========================
 
-                    # Draw detection boxes from backend response
-                    frame = draw_detection_boxes(frame, fall, violence)
+        if frame_count % INFERENCE_INTERVAL == 0:
 
-                    # Log notification recipients and broadcast status
-                    if response.get("incident_created"):
-                        logger.info("✓ Incident created - WebSocket broadcast triggered")
-                        logger.info("✓ Notifications sent to zone users")
-                        if response.get("incidents"):
-                            for inc in response.get("incidents"):
-                                logger.info(f"  Incident {inc.get('incident_id')} "
-                                           f"({inc.get('danger_category')})")
+            fall_results     = fall_model(frame,     imgsz=640, conf=0.4, verbose=False)
+            violence_results = violence_model(frame, imgsz=640, conf=0.4, verbose=False)
 
-            # Draw overlay text
-            frame = draw_overlay_text(frame, state, fps_actual, fall_confidence, violence_confidence)
+            # FALL PARSING
+            for r in fall_results:
+                if r.boxes is not None:
+                    boxes  = r.boxes.xyxy.cpu().numpy()
+                    scores = r.boxes.conf.cpu().numpy()
+                    for box, score in zip(boxes, scores):
+                        x1, y1, x2, y2 = map(int, box)
+                        fall_conf = max(fall_conf, float(score))
+                        if score >= FALL_CONFIDENCE_THRESHOLD:
+                            fall_detected = True
+                            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                            cv2.putText(
+                                frame, f"FALL {score:.2f}",
+                                (x1, y1 - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2
+                            )
 
-            # Display frame
-            cv2.imshow("Yaqidh Real-time Detection", frame)
+            # VIOLENCE PARSING
+            for r in violence_results:
+                if r.boxes is not None:
+                    boxes  = r.boxes.xyxy.cpu().numpy()
+                    scores = r.boxes.conf.cpu().numpy()
+                    for box, score in zip(boxes, scores):
+                        x1, y1, x2, y2 = map(int, box)
+                        violence_conf = max(violence_conf, float(score))
+                        if score >= VIOLENCE_CONFIDENCE_THRESHOLD:
+                            violence_detected = True
+                            cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+                            cv2.putText(
+                                frame, f"VIOLENCE {score:.2f}",
+                                (x1, y1 - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2
+                            )
 
-            # FPS calculation
-            current_time = time.time()
-            if current_time - fps_clock >= 1.0:
-                fps_actual = fps_frames / (current_time - fps_clock)
-                fps_frames = 0
-                fps_clock = current_time
+            # TEMPORAL VERIFICATION
+            if fall_detected and motion_detected:
+                fall_counter += 1
+            else:
+                fall_counter = 0
 
-            # FPS limiting
-            key = cv2.waitKey(max(1, int(1000 / FPS_LIMIT))) & 0xFF
+            if violence_detected and motion_detected:
+                violence_counter += 1
+            else:
+                violence_counter = 0
 
-            if key == ord('q'):
-                logger.info("Exiting...")
-                break
-            elif key == ord('p'):
-                logger.info("Paused - press 'p' again to resume")
-                while True:
-                    if cv2.waitKey(0) & 0xFF == ord('p'):
-                        break
-            elif key == ord('s'):
-                filename = f"detection_frame_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-                cv2.imwrite(filename, frame)
-                logger.info(f"Frame saved: {filename}")
+            # SEND ALERT
+            if fall_counter >= FALL_THRESHOLD:
+                send_alert(frame, frame_buffer, camera_id, token, "fall")
+                fall_counter = 0
 
-    except KeyboardInterrupt:
-        logger.info("Interrupted by user")
-    finally:
-        cap.release()
-        cv2.destroyAllWindows()
-        logger.info("Cleanup complete")
+            elif violence_counter >= VIOLENCE_THRESHOLD:
+                send_alert(frame, frame_buffer, camera_id, token, "violence")
+                violence_counter = 0
+
+        # =========================
+        # FPS
+        # =========================
+
+        current_time = time.time()
+        if current_time - fps_clock >= 1.0:
+            fps_actual = fps_frames / (current_time - fps_clock)
+            fps_frames = 0
+            fps_clock  = current_time
+
+        # =========================
+        # OVERLAY
+        # =========================
+
+        cv2.putText(
+            frame, f"FPS: {fps_actual:.1f}",
+            (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2
+        )
+
+        cv2.putText(
+            frame, f"Motion Score: {motion_score}",
+            (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 165, 255), 2
+        )
+
+        cv2.putText(
+            frame, f"Fall Counter: {fall_counter}/{FALL_THRESHOLD}",
+            (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2
+        )
+
+        cv2.putText(
+            frame, f"Violence Counter: {violence_counter}/{VIOLENCE_THRESHOLD}",
+            (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2
+        )
+
+        cv2.putText(
+            frame, f"Camera: {camera_name}",
+            (10, FRAME_HEIGHT - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1
+        )
+
+        cv2.imshow("Yaqidh Real-time Detection", frame)
+
+        key = cv2.waitKey(max(1, int(1000 / FPS_LIMIT))) & 0xFF
+        if key == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+    print("\nFinished successfully!")
 
 
-def main():
-    """Entry point."""
-
-    logger.info("="*70)
-    logger.info("Yaqidh Real-time Camera Testing Script")
-    logger.info("="*70)
-    logger.info(f"API Base: {API_BASE_URL}\n")
-
-    # Get camera ID from user or config
-    camera_id = TEST_CAMERA_ID
-    if not camera_id:
-        camera_id_input = input("Enter camera ID (or press Enter for random UUID): ").strip()
-        camera_id = camera_id_input if camera_id_input else str(uuid.uuid4())
-
-    logger.info(f"Camera ID: {camera_id}\n")
-
-    # Authenticate
-    logger.info("Authenticating...")
-    email = input(f"Email (default: {TEST_EMAIL}): ").strip() or TEST_EMAIL
-    password = input(f"Password (default: {TEST_PASSWORD}): ").strip() or TEST_PASSWORD
-
-    token = get_auth_token(email, password)
-    if not token:
-        logger.error("Failed to authenticate. Ensure test user exists in database:")
-        logger.error(f"  Email: {email}")
-        logger.error(f"  Password: {password}")
-        logger.error("\nYou can create a test user via the /auth/register endpoint")
-        sys.exit(1)
-
-    logger.info("")
-    run_realtime_detection(camera_id, token)
-
+# =========================
+# ENTRY POINT
+# =========================
 
 if __name__ == "__main__":
-    main()
+    token, role = login()
+    camera_id, camera_name = select_camera(token, role)
+    run_detection(token, camera_id, camera_name)

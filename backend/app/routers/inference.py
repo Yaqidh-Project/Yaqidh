@@ -112,7 +112,7 @@ async def predict(
                 ext = Path(clip_filename or "clip.bin").suffix or ".bin"
                 dest = clips_dir / f"{incident_id}{ext}"
                 dest.write_bytes(image_bytes)
-                clip_path_saved = str(dest)
+                clip_path_saved = f"/incident_clips/{dest.name}"
                 incident.incident_clip = clip_path_saved
                 await db.flush()
             except Exception as e:
@@ -226,7 +226,7 @@ async def detect_both(
                     ext = Path(clip_filename or "clip.bin").suffix or ".bin"
                     dest = clips_dir / f"{incident.incident_id}{ext}"
                     dest.write_bytes(image_bytes)
-                    clip_path_saved = str(dest)
+                    clip_path_saved = f"/incident_clips/{dest.name}"
                     incident.incident_clip = clip_path_saved
                     await db.flush()
                 except Exception as e:
@@ -293,7 +293,7 @@ async def detect_both(
                     ext = Path(clip_filename or "clip.bin").suffix or ".bin"
                     dest = clips_dir / f"{incident.incident_id}{ext}"
                     dest.write_bytes(image_bytes)
-                    clip_path_saved = str(dest)
+                    clip_path_saved = f"/incident_clips/{dest.name}"
                     incident.incident_clip = clip_path_saved
                     await db.flush()
                 except Exception as e:
