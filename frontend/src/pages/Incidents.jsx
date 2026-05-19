@@ -3,13 +3,15 @@ import {
   AlertTriangle, 
   Clock, 
   MapPin, 
-  AlertCircle 
+  AlertCircle,
+  Eye,
+  Download 
 } from 'lucide-react';
 
 /**
  * Individual Incident Card Component
  */
-const IncidentCard = ({ incident, onViewDetails }) => (
+const IncidentCard = ({ incident, onViewDetails, onViewClip, onDownloadClip }) => (
   <div 
     onClick={() => onViewDetails(incident)}
     className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow cursor-pointer"
@@ -53,9 +55,43 @@ const IncidentCard = ({ incident, onViewDetails }) => (
       </div>
     </div>
     
-    <div className="flex items-center gap-2 text-sm text-slate-600">
-      <Clock size={14} />
-      <span>{incident.time}</span>
+    {/* Bottom row: Absolute Timestamp & Action Icons horizontally aligned */}
+    <div className="flex items-center justify-between text-sm text-slate-600 mt-2">
+      <div className="flex items-center gap-2">
+        <Clock size={14} />
+        <span>{incident.time}</span>
+      </div>
+
+      {/* Media Actions row aligned with the date */}
+      <div className="flex items-center gap-1.5">
+        <button
+          onClick={(e) => {
+            e.stopPropagation(); // Prevents card selection trigger
+            onViewClip(incident);
+          }}
+          className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-colors group relative"
+          title="View Clip"
+        >
+          <Eye size={18} />
+          <span className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+            View Clip
+          </span>
+        </button>
+        
+        <button
+          onClick={(e) => {
+            e.stopPropagation(); // Prevents card selection trigger
+            onDownloadClip(incident);
+          }}
+          className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-colors group relative"
+          title="Download Clip"
+        >
+          <Download size={18} />
+          <span className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+            Download Clip
+          </span>
+        </button>
+      </div>
     </div>
     
     <div className="mt-4 flex items-center gap-2">
@@ -72,7 +108,6 @@ export default function Incidents() {
   const [selectedIncident, setSelectedIncident] = useState(null);
 
   useEffect(() => {
-    // Get user role from sessionStorage
     let role = 'manager';
     try {
       const user = JSON.parse(sessionStorage.getItem('user'));
@@ -81,82 +116,30 @@ export default function Incidents() {
       console.error("Could not parse user role from sessionStorage", e);
     }
 
-    // Set mock data based on user role
     if (role === 'manager') {
-      // Manager View: Educational/Facility Locations
       setIncidents([
-        { 
-          id: 1, 
-          type: 'Fall Detected', 
-          severity: 'critical', 
-          location: 'Playroom A', 
-          time: '2026-5-13 19:00', 
-          relativeTime: 'Just now', 
-          status: 'active' 
-        },
-        { 
-          id: 2, 
-          type: 'Violence Suspicion', 
-          severity: 'warning', 
-          location: 'Classroom B', 
-          time: '2026-5-13 18:40', 
-          relativeTime: '20 min ago', 
-          status: 'active' 
-        },
-        { 
-          id: 3, 
-          type: 'Fall Detected', 
-          severity: 'critical', 
-          location: 'Outdoor Playground', 
-          time: '2026-5-13 18:40', 
-          relativeTime: '20 min ago', 
-          status: 'resolved' 
-        },
-        {
-          id: 4,
-          type: 'Violence Detected',
-          severity: 'critical',
-          location: 'Classroom C',
-          time: '2026-5-13 18:40', 
-          relativeTime: '20 min ago', 
-          status: 'active' 
-        },
+        { id: 1, type: 'Fall Detected', severity: 'critical', location: 'Playroom A', time: '2026-5-13 19:00', relativeTime: 'Just now', status: 'active' },
+        { id: 2, type: 'Violence Suspicion', severity: 'warning', location: 'Classroom B', time: '2026-5-13 18:40', relativeTime: '20 min ago', status: 'active' },
+        { id: 3, type: 'Fall Detected', severity: 'critical', location: 'Outdoor Playground', time: '2026-5-13 18:40', relativeTime: '20 min ago', status: 'resolved' },
+        { id: 4, type: 'Violence Detected', severity: 'critical', location: 'Classroom C', time: '2026-5-13 18:40', relativeTime: '20 min ago', status: 'active' },
       ]);
     } else {
-      // Parent View: Home-based Locations
       setIncidents([
-        { 
-          id: 1, 
-          type: 'Fall Detected', 
-          severity: 'critical', 
-          location: "Baby's Bedroom", 
-          time: '2026-5-13 19:00', 
-          relativeTime: 'Just now', 
-          status: 'active' 
-        },
-        { 
-          id: 2, 
-          type: 'Violence Suspicion', 
-          severity: 'warning', 
-          location: "Living Room", 
-          time: '2026-5-13 18:40', 
-          relativeTime: '20 min ago', 
-          status: 'active' 
-        },
-        { 
-          id: 3, 
-          type: 'Fall Detected', 
-          severity: 'critical', 
-          location: 'Garden / Backyard', 
-          time: '2026-5-13 18:40', 
-          relativeTime: '20 min ago', 
-          status: 'resolved' 
-        },
+        { id: 1, type: 'Fall Detected', severity: 'critical', location: "Baby's Bedroom", time: '2026-5-13 19:00', relativeTime: 'Just now', status: 'active' },
+        { id: 2, type: 'Violence Suspicion', severity: 'warning', location: "Living Room", time: '2026-5-13 18:40', relativeTime: '20 min ago', status: 'active' },
+        { id: 3, type: 'Fall Detected', severity: 'critical', location: 'Garden / Backyard', time: '2026-5-13 18:40', relativeTime: '20 min ago', status: 'resolved' },
       ]);
     }
   }, []);
 
-  // Calculate statistics for the dashboard
+  const handleViewClip = (incident) => {
+    console.log("Viewing clip for incident:", incident.id);
+  };
+
+  const handleDownloadClip = (incident) => {
+    console.log("Downloading clip for incident:", incident.id);
+  };
+
   const activeSevere = incidents.filter(i => i.status === 'active' && i.severity === 'critical').length;
   const activeWarnings = incidents.filter(i => i.status === 'active' && i.severity === 'warning').length;
 
@@ -189,7 +172,13 @@ export default function Incidents() {
       {/* Incidents Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {incidents.map(incident => (
-          <IncidentCard key={incident.id} incident={incident} onViewDetails={setSelectedIncident} />
+          <IncidentCard 
+            key={incident.id} 
+            incident={incident} 
+            onViewDetails={setSelectedIncident}
+            onViewClip={handleViewClip}
+            onDownloadClip={handleDownloadClip}
+          />
         ))}
       </div>
     </div>
