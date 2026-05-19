@@ -56,7 +56,7 @@ export default function Login() {
             {/* Role Selector */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Select Role (for testing)
+                Select Role
               </label>
               <select
                 value={role}
