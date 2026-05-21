@@ -19,14 +19,34 @@ router = APIRouter(
 @router.post("", response_model=ZoneOut, status_code=status.HTTP_201_CREATED)
 async def create_zone(
     payload: ZoneCreate,
-    current_user: User = Depends(require_roles("Manager")),
+    current_user: User = Depends(require_roles("Manager", "Parent")),
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Creates a new infrastructure monitoring zone. 
+    Accessible by both Managers and Parents. If created by a Parent, 
+    the system automatically assigns them ownership mapping to this zone.
+    """
+    # Create the new zone entity record
     zone = Zone(zone_name=payload.zone_name)
     db.add(zone)
     await db.flush()
     await db.refresh(zone)
-    return zone
+
+    # Business Logic Sync: Automatically link the creating user to the new zone database grid
+    # This guarantees the creator has instant read/write visibility access contexts
+    # We load the relationship lazily and establish the bridge link
+    result = await db.execute(
+        select(Zone).options(selectinload(Zone.users)).where(Zone.zone_id == zone.zone_id)
+    )
+    zone_with_relations = result.scalar_one()
+    
+    if current_user not in zone_with_relations.users:
+        zone_with_relations.users.append(current_user)
+        await db.flush()
+        await db.commit()
+
+    return zone_with_relations
 
 
 @router.get("", response_model=list[ZoneOut])
