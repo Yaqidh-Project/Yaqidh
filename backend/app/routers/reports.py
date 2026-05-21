@@ -36,12 +36,12 @@ async def generate_report(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Generates a new report based on user role and specific filtering criteria.
+    Generates a new report based on user role and specific filtering criteria,
+    ensuring strict contextual isolation boundaries.
     """
     query = select(Incident)
 
-    # Environment Filtering: Parents see their home data, Managers see their nursery data
-    # Both are strictly bounded by the zones linked to their user account
+    # Secure Multi-Tenancy Data Isolation bound matrix grid
     query = (
         query
         .join(Incident.camera)
@@ -50,7 +50,7 @@ async def generate_report(
         .where(User.user_id == current_user.user_id)
     )
 
-    # Apply additional dynamic filters passed from the frontend
+    # Apply additional dynamic filters passed from the frontend layout
     if filters.start_date:
         query = query.where(Incident.timestamp >= filters.start_date)
     if filters.end_date:
@@ -65,7 +65,7 @@ async def generate_report(
     result = await db.execute(query.order_by(Incident.timestamp.desc()))
     incidents = result.scalars().all()
 
-    # Automatically generate a professional summary of categories found
+    # Automatically generate a professional executive summary text block
     summary_parts = f"Total incidents captured: {len(incidents)}"
     if incidents:
         categories: dict[str, int] = {}
@@ -74,7 +74,8 @@ async def generate_report(
         cat_details = " | ".join([f"{cat}: {count}" for cat, count in categories.items()])
         summary_parts += f" ({cat_details})"
 
-    # Save the generated report tracking details into the database
+    # Instantiate the report record by passing the M2M list during initialization.
+    # This securely circumvents lazy loading / MissingGreenlet exceptions in Async sessions.
     report = Report(
         filter_criteria=filters.model_dump(mode="json"),
         report_summary=summary_parts,
@@ -83,8 +84,11 @@ async def generate_report(
     )
     db.add(report)
     await db.flush()
+    
+    # Securely commit transaction block block to disk storage
+    await db.commit()
 
-    # Eagerly load incidents relation to return the complete response object
+    # Eagerly reload full relational tree schema structure to safely match response schema model
     result2 = await db.execute(
         select(Report)
         .options(selectinload(Report.incidents))
@@ -101,7 +105,7 @@ async def list_reports(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Retrieves history of reports generated exclusively by the logged-in user.
+    Retrieves history of reports generated exclusively by the logged-in user session context.
     """
     query = (
         select(Report)
@@ -122,7 +126,7 @@ async def get_report(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Fetches a single report details ensuring strict data ownership security.
+    Fetches a single report details ensuring strict data ownership access control verification.
     """
     result = await db.execute(
         select(Report)
@@ -133,7 +137,7 @@ async def get_report(
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
     
-    # Security Check: Prevent crossing boundaries between parents or different nurseries
+    # Guard Access Isolation Rules Block
     if report.user_id != current_user.user_id:
         raise HTTPException(status_code=403, detail="Access denied to this report")
     return report
@@ -146,7 +150,7 @@ async def export_report_json(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Exports report metadata and nested incident entries into a raw structured JSON file.
+    Exports report metadata and nested incident entries into a raw structured secure JSON payload download file.
     """
     result = await db.execute(
         select(Report)
@@ -195,8 +199,7 @@ async def export_report_pdf(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Dynamically constructs a clean, formatted PDF safety document using ReportLab 
-    and streams it directly back to the client browser for direct printing/saving.
+    Dynamically constructs a formatted PDF safety document stream structure using ReportLab framework flowables.
     """
     result = await db.execute(
         select(Report)
@@ -210,15 +213,15 @@ async def export_report_pdf(
     if report.user_id != current_user.user_id:
         raise HTTPException(status_code=403, detail="Access denied to export this report")
 
-    # In-memory binary stream to keep file operations efficient without touching disk storage
+    # In-memory binary stream structure setup for performance efficiency
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
     story = []
     
-    # Document Styling Layout Config
+    # Config Document Document Style Elements Layout Sheet
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle(
-        'PDFTitle', parent=styles['Heading1'], fontSize=24, textColor=colors.HexColor("#1A365D"), spaceAfter=12
+        'PDFTitle', parent=styles['Heading1'], fontSize=22, textColor=colors.HexColor("#1A365D"), spaceAfter=12
     )
     meta_style = ParagraphStyle(
         'PDFMeta', parent=styles['Normal'], fontSize=10, textColor=colors.gray, spaceAfter=6
@@ -228,7 +231,7 @@ async def export_report_pdf(
     )
     table_text_style = ParagraphStyle('TableText', parent=styles['Normal'], fontSize=9)
 
-    # Document Elements Creation
+    # Appending UI Node Flowables Elements Elements
     story.append(Paragraph("YAQIDH SYSTEM - INCIDENT SAFETY REPORT", title_style))
     story.append(Paragraph(f"<b>Report ID:</b> {report.report_id}", meta_style))
     story.append(Paragraph(f"<b>Generated On:</b> {report.generated_at.strftime('%Y-%m-%d %H:%M:%S')}", meta_style))
@@ -239,7 +242,7 @@ async def export_report_pdf(
     story.append(Paragraph("Detailed Incidents Log:", styles['Heading2']))
     story.append(Spacer(1, 8))
 
-    # Constructing data matrix grid for the layout table
+    # Compile the layout framework data matrix structure grid
     table_data = [["Timestamp", "Danger Category", "Incident Type", "Confidence"]]
     
     for inc in report.incidents:
@@ -251,8 +254,8 @@ async def export_report_pdf(
             Paragraph(f"{inc.confidence * 100:.1f}%", table_text_style)
         ])
 
-    # Applying sleek, production-grade styling sheet onto the data matrix
-    incidents_table = Table(table_data, colWidths=[130, 140, 150, 80])
+    # Assign dynamic grid columns matching standard layout margins bounds (Total 500 Width units)
+    incidents_table = Table(table_data, colWidths=[125, 125, 150, 100])
     incidents_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1A365D")),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -267,11 +270,10 @@ async def export_report_pdf(
     
     story.append(incidents_table)
     
-    # Compile all elements into strict flowables sequence layout
+    # Process compilation layout stream block context
     doc.build(story)
     buffer.seek(0)
 
-    # Stream the raw bytes back acting directly as an attachment file download
     return StreamingResponse(
         buffer,
         media_type="application/pdf",
@@ -288,7 +290,7 @@ async def delete_report(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Deletes a specific archived report record from the persistence layer database.
+    Deletes a specific archived report record from the persistence database storage cluster.
     """
     result = await db.execute(select(Report).where(Report.report_id == report_id))
     report = result.scalar_one_or_none()
