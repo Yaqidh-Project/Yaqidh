@@ -23,7 +23,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+ HEAD
 
 # Incident video clips - generated content, not source code
 Backend/incident_clips/
 incident_clips/
+
+__pycache__/
+*.pyc
+ 76d8412 (Update gitignore)
