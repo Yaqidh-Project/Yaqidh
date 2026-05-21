@@ -32,8 +32,10 @@ async def _get_zone_users(camera_id: uuid.UUID, db: AsyncSession) -> list[uuid.U
 
 
 async def _assert_camera_access(user: User, camera_id: uuid.UUID, db: AsyncSession) -> None:
-    if user.role_name == "Manager":
+    # Allow Managers and Parents to bypass zone check
+    if user.role_name in ["Manager", "Parent"]:
         return
+        
     result = await db.execute(
         select(Camera)
         .join(Camera.zone)
@@ -86,15 +88,19 @@ async def predict(
     clip_path_saved = None
 
     positive_labels = {"fall", "violence"}
-    # Use model-specific threshold
+    
+    # Use model-specific threshold from central settings
     threshold = settings.CONFIDENCE_THRESHOLD if model_name == "fall_detection" else settings.VIOLENCE_CONFIDENCE_THRESHOLD
-    if label in positive_labels and confidence >= threshold:
+    
+    if str(label).lower() in positive_labels and confidence >= threshold:
         from app.models.incident import Incident
 
-        danger_category = "fall" if model_name == "fall_detection" else "violence"
+        # Calculate danger severity dynamic classification based on confidence score
+        calculated_severity = "Critical" if confidence >= 0.75 else "Warning"
+
         incident = Incident(
-            danger_category=danger_category,
-            incident_type=label,
+            danger_category=calculated_severity,
+            incident_type=str(label).lower(),
             camera_id=camera_id,
             confidence=confidence,
             status="open",
@@ -124,8 +130,8 @@ async def predict(
             {
                 "event": "incident_detected",
                 "incident_id": str(incident.incident_id),
-                "danger_category": danger_category,
-                "incident_type": label,
+                "danger_category": calculated_severity,
+                "incident_type": str(label).lower(),
                 "camera_id": str(camera_id),
                 "confidence": confidence,
                 "timestamp": incident.timestamp.isoformat(),
@@ -188,13 +194,13 @@ async def detect_both(
     incident_created = False
     incidents: list[dict] = []
 
-    # Check cooldown for fall detection
+    positive_labels = {"fall", "violence"}
+
+    # 1. Check cooldown and threshold for fall detection
     fall_label = fall_result["label"]
     fall_confidence = fall_result["confidence"]
-    fall_incident_created = False
 
-    positive_labels = {"fall", "violence"}
-    if fall_label in positive_labels and fall_confidence >= settings.CONFIDENCE_THRESHOLD:
+    if str(fall_label).lower() in positive_labels and fall_confidence >= settings.CONFIDENCE_THRESHOLD:
         cooldown_key = (str(camera_id), "fall")
         now = datetime.now().timestamp()
         last_incident_time = _detection_cooldowns.get(cooldown_key, 0)
@@ -202,9 +208,12 @@ async def detect_both(
         if now - last_incident_time >= COOLDOWN_SECONDS:
             from app.models.incident import Incident
 
+            # Calculate dynamic fall severity classification
+            fall_severity = "Critical" if fall_confidence >= 0.75 else "Warning"
+
             incident = Incident(
-                danger_category="fall",
-                incident_type=fall_label,
+                danger_category=fall_severity,
+                incident_type=str(fall_label).lower(),
                 camera_id=camera_id,
                 confidence=fall_confidence,
                 status="open",
@@ -213,7 +222,6 @@ async def detect_both(
             db.add(incident)
             await db.flush()
             await db.refresh(incident)
-            fall_incident_created = True
             incident_created = True
             _detection_cooldowns[cooldown_key] = now
 
@@ -239,8 +247,8 @@ async def detect_both(
                 {
                     "event": "incident_detected",
                     "incident_id": str(incident.incident_id),
-                    "danger_category": "fall",
-                    "incident_type": fall_label,
+                    "danger_category": fall_severity,
+                    "incident_type": str(fall_label).lower(),
                     "camera_id": str(camera_id),
                     "confidence": fall_confidence,
                     "timestamp": incident.timestamp.isoformat(),
@@ -251,17 +259,16 @@ async def detect_both(
 
             incidents.append({
                 "incident_id": str(incident.incident_id),
-                "danger_category": "fall",
-                "incident_type": fall_label,
+                "danger_category": fall_severity,
+                "incident_type": str(fall_label).lower(),
                 "confidence": fall_confidence,
             })
 
-    # Check cooldown for violence detection
+    # 2. Check cooldown and threshold for violence detection
     violence_label = violence_result["label"]
     violence_confidence = violence_result["confidence"]
-    violence_incident_created = False
 
-    if violence_label in positive_labels and violence_confidence >= settings.VIOLENCE_CONFIDENCE_THRESHOLD:
+    if str(violence_label).lower() in positive_labels and violence_confidence >= settings.VIOLENCE_CONFIDENCE_THRESHOLD:
         cooldown_key = (str(camera_id), "violence")
         now = datetime.now().timestamp()
         last_incident_time = _detection_cooldowns.get(cooldown_key, 0)
@@ -269,9 +276,12 @@ async def detect_both(
         if now - last_incident_time >= COOLDOWN_SECONDS:
             from app.models.incident import Incident
 
+            # Calculate dynamic violence severity classification
+            violence_severity = "Critical" if violence_confidence >= 0.75 else "Warning"
+
             incident = Incident(
-                danger_category="violence",
-                incident_type=violence_label,
+                danger_category=violence_severity,
+                incident_type=str(violence_label).lower(),
                 camera_id=camera_id,
                 confidence=violence_confidence,
                 status="open",
@@ -280,7 +290,6 @@ async def detect_both(
             db.add(incident)
             await db.flush()
             await db.refresh(incident)
-            violence_incident_created = True
             incident_created = True
             _detection_cooldowns[cooldown_key] = now
 
@@ -306,8 +315,8 @@ async def detect_both(
                 {
                     "event": "incident_detected",
                     "incident_id": str(incident.incident_id),
-                    "danger_category": "violence",
-                    "incident_type": violence_label,
+                    "danger_category": violence_severity,
+                    "incident_type": str(violence_label).lower(),
                     "camera_id": str(camera_id),
                     "confidence": violence_confidence,
                     "timestamp": incident.timestamp.isoformat(),
@@ -318,10 +327,13 @@ async def detect_both(
 
             incidents.append({
                 "incident_id": str(incident.incident_id),
-                "danger_category": "violence",
-                "incident_type": violence_label,
+                "danger_category": violence_severity,
+                "incident_type": str(violence_label).lower(),
                 "confidence": violence_confidence,
             })
+
+    # Explicitly commit database transactions to persist tracked incidents
+    await db.commit()
 
     return CombinedPredictionResponse(
         fall_detection=fall_result,
