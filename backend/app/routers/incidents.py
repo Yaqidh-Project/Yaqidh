@@ -20,12 +20,18 @@ router = APIRouter(
 
 
 def _normalize_incident_clip(value: str | None) -> str | None:
+    """
+    Normalizes the incident video clip file path.
+    """
     if value is None:
         return None
     return f"/incident_clips/{Path(value).name}"
 
 
 async def _get_zone_users(camera_id: uuid.UUID, db: AsyncSession) -> list[uuid.UUID]:
+    """
+    Fetches all user IDs mapped to the zone where the specific camera belongs.
+    """
     result = await db.execute(
         select(User.user_id)
         .join(Zone.users)
@@ -36,8 +42,9 @@ async def _get_zone_users(camera_id: uuid.UUID, db: AsyncSession) -> list[uuid.U
 
 
 async def _assert_camera_access(user: User, camera_id: uuid.UUID, db: AsyncSession) -> None:
-    if user.role_name == "Manager":
-        return
+    """
+    Enforces data isolation by verifying if the user has access to the specified camera's zone.
+    """
     result = await db.execute(
         select(Camera)
         .join(Camera.zone)
@@ -51,12 +58,28 @@ async def _assert_camera_access(user: User, camera_id: uuid.UUID, db: AsyncSessi
         )
 
 
+async def _assert_incident_access(user: User, incident: Incident, db: AsyncSession) -> None:
+    """
+    Internal helper to validate write/update permissions on an incident.
+    Ensures that a user cannot access/modify an incident unless they own the corresponding zone context.
+    """
+    if not incident.camera_id:
+        raise HTTPException(status_code=403, detail="Access denied to this incident")
+        
+    user_ids = await _get_zone_users(incident.camera_id, db)
+    if user.user_id not in user_ids:
+        raise HTTPException(status_code=403, detail="Access denied to this incident")
+
+
 @router.post("", response_model=IncidentOut, status_code=status.HTTP_201_CREATED)
 async def create_incident(
     payload: IncidentCreate,
-    current_user: User = Depends(require_roles("Manager", "Teacher")),
+    current_user: User = Depends(require_roles("Manager", "Teacher")),  
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Creates a new security/safety incident record and triggers real-time WebSocket notifications.
+    """
     cam_result = await db.execute(select(Camera).where(Camera.camera_id == payload.camera_id))
     if not cam_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Camera not found")
@@ -68,6 +91,7 @@ async def create_incident(
     incident = Incident(**incident_data)
     db.add(incident)
     await db.flush()
+    await db.commit()  # Explicit commit added to persist incident record permanently
     await db.refresh(incident)
 
     user_ids = await _get_zone_users(payload.camera_id, db)
@@ -89,15 +113,12 @@ async def create_incident(
 async def list_incidents(
     skip: int = 0,
     limit: int = 50,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles("Manager", "Parent")),  #  Restricted to Manager & Parent only
     db: AsyncSession = Depends(get_db),
 ):
-    if current_user.role_name == "Manager":
-        result = await db.execute(
-            select(Incident).order_by(Incident.timestamp.desc()).offset(skip).limit(limit)
-        )
-        return result.scalars().all()
-
+    """
+    Lists incidents filtered strictly by the current user's assigned zones.
+    """
     result = await db.execute(
         select(Incident)
         .join(Incident.camera)
@@ -114,41 +135,31 @@ async def list_incidents(
 @router.get("/{incident_id}", response_model=IncidentOut)
 async def get_incident(
     incident_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles("Manager", "Parent")),  # Restricted to Manager & Parent only
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Retrieves a single incident by its ID enforcing clear security boundaries.
+    """
     result = await db.execute(select(Incident).where(Incident.incident_id == incident_id))
     incident = result.scalar_one_or_none()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
 
-    if current_user.role_name != "Manager":
-        if not incident.camera_id:
-            raise HTTPException(status_code=403, detail="Access denied to this incident")
-        user_ids = await _get_zone_users(incident.camera_id, db)
-        if current_user.user_id not in user_ids:
-            raise HTTPException(status_code=403, detail="Access denied to this incident")
-
+    await _assert_incident_access(current_user, incident, db)
     return incident
-
-
-async def _assert_incident_access(user: User, incident: Incident, db: AsyncSession) -> None:
-    if user.role_name == "Manager":
-        return
-    if not incident.camera_id:
-        raise HTTPException(status_code=403, detail="Access denied to this incident")
-    user_ids = await _get_zone_users(incident.camera_id, db)
-    if user.user_id not in user_ids:
-        raise HTTPException(status_code=403, detail="Access denied to this incident")
 
 
 @router.patch("/{incident_id}", response_model=IncidentOut)
 async def update_incident(
     incident_id: uuid.UUID,
     payload: IncidentUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles("Manager", "Parent")),  # Restricted to Manager & Parent only
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Updates the fields of an incident record after enforcing data access restrictions.
+    """
     result = await db.execute(select(Incident).where(Incident.incident_id == incident_id))
     incident = result.scalar_one_or_none()
     if not incident:
@@ -160,7 +171,9 @@ async def update_incident(
         if field == "incident_clip":
             value = _normalize_incident_clip(value)
         setattr(incident, field, value)
+        
     await db.flush()
+    await db.commit()  # Explicit commit added to lock inside persistence matrix
     await db.refresh(incident)
     return incident
 
@@ -168,11 +181,18 @@ async def update_incident(
 @router.delete("/{incident_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_incident(
     incident_id: uuid.UUID,
-    current_user: User = Depends(require_roles("Manager")),
+    current_user: User = Depends(require_roles("Manager", "Parent")),  # Opened for Parent as well
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Deletes an incident record from the database context permanently.
+    """
     result = await db.execute(select(Incident).where(Incident.incident_id == incident_id))
     incident = result.scalar_one_or_none()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
+        
+    await _assert_incident_access(current_user, incident, db)  # Secure validation layer
+        
     await db.delete(incident)
+    await db.commit()

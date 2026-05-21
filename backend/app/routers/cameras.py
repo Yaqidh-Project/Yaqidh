@@ -9,10 +9,15 @@ from app.models.user import User
 from app.schemas.camera import CameraCreate, CameraUpdate, CameraOut
 from app.auth.dependencies import get_current_user, require_roles, require_phone_verified
 
+# Strict global router security lock.
+# Only Managers and Parents can interact with cameras. Teachers are completely blocked.
 router = APIRouter(
     prefix="/cameras",
     tags=["cameras"],
-    dependencies=[Depends(require_phone_verified)],
+    dependencies=[
+        Depends(require_phone_verified),
+        Depends(require_roles("Manager", "Parent"))
+    ],
 )
 
 
@@ -32,19 +37,27 @@ async def _user_can_access_camera(user: User, camera: Camera, db: AsyncSession) 
 @router.post("", response_model=CameraOut, status_code=status.HTTP_201_CREATED)
 async def create_camera(
     payload: CameraCreate,
-    current_user: User = Depends(require_roles("Manager", "Parent")),
+    current_user: User = Depends(get_current_user),  # Role handled globally
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Provisions a new hardware camera record configuration. 
-    Globally accessible by both Managers and Parents across any registered infrastructure zone.
+    Provisions a new hardware camera record configuration.
+    The creator must have ownership permissions over the target zone.
     """
-    # Verify that the target infrastructure boundary zone actually exists in persistence storage
-    zone_result = await db.execute(select(Zone).where(Zone.zone_id == payload.zone_id))
+    # Prevent Cross-Tenant Injection. 
+    # Verify the zone exists AND belongs to the calling user (Manager or Parent).
+    zone_result = await db.execute(
+        select(Zone)
+        .join(Zone.users)
+        .where(Zone.zone_id == payload.zone_id, User.user_id == current_user.user_id)
+    )
     if not zone_result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Zone not found")
+        raise HTTPException(
+            status_code=404, 
+            detail="Zone not found or you do not have permission to add cameras to it."
+        )
 
-    # Initialize and flush the new tracking target camera node entity openly
+    # Initialize and persist the new camera node entity safely
     camera = Camera(**payload.model_dump())
     db.add(camera)
     await db.flush()
@@ -64,7 +77,6 @@ async def list_cameras(
     Retrieves ONLY the camera streams that belong to the zones assigned to the current user.
     This applies to both Managers and Parents to strictly maintain privacy boundaries.
     """
-    # Dynamically fetch cameras where the logged-in user is explicitly linked to their zone
     result = await db.execute(
         select(Camera)
         .join(Camera.zone)
@@ -100,17 +112,19 @@ async def get_camera(
 async def update_camera(
     camera_id: uuid.UUID,
     payload: CameraUpdate,
-    current_user: User = Depends(require_roles("Manager")),
+    current_user: User = Depends(get_current_user),  # Open to both Manager & Parent (checked via helper)
     db: AsyncSession = Depends(get_db),
 ):
     """
     Modifies runtime configurations or access URLs for an established stream tracker.
+    Both Managers and Parents can edit their owned cameras.
     """
     result = await db.execute(select(Camera).where(Camera.camera_id == camera_id))
     camera = result.scalar_one_or_none()
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
         
+    # Security Check: Enforce that the user owns the zone this camera belongs to
     if not await _user_can_access_camera(current_user, camera, db):
          raise HTTPException(status_code=403, detail="Access denied: You cannot modify this camera.")
          
@@ -125,17 +139,19 @@ async def update_camera(
 @router.delete("/{camera_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_camera(
     camera_id: uuid.UUID,
-    current_user: User = Depends(require_roles("Manager")),
+    current_user: User = Depends(get_current_user),  # Open to both Manager & Parent (checked via helper)
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Deletes a registered camera entity from tracking matrices.
+    Deletes a registered camera entity from tracking matrices permanently.
+    Both Managers and Parents can delete their owned cameras.
     """
     result = await db.execute(select(Camera).where(Camera.camera_id == camera_id))
     camera = result.scalar_one_or_none()
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
         
+    # Security Check: Enforce that the user owns the zone this camera belongs to
     if not await _user_can_access_camera(current_user, camera, db):
          raise HTTPException(status_code=403, detail="Access denied: You cannot delete this camera.")
          
