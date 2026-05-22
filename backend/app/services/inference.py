@@ -22,8 +22,8 @@ except ImportError:
     logger.warning("opencv-python-headless not available — image preprocessing disabled")
 
 
-FALL_LABELS     = ["no_fall", "fall"]
-VIOLENCE_LABELS = ["no_violence", "violence"]
+FALL_LABELS     = ["Non fall", "Fall"]
+VIOLENCE_LABELS = ["Non-Violence", "Violence"]
 INPUT_SIZE      = 640
 CONF_THRESH     = 0.4
 IOU_THRESH      = 0.45
