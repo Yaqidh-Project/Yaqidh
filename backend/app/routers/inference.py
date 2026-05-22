@@ -1,6 +1,5 @@
 import uuid
 from pathlib import Path
-from datetime import datetime
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -125,19 +124,16 @@ async def predict(
                 logger.warning(f"Could not save clip file: {e}")
 
         user_ids = await _get_zone_users(camera_id, db)
-        await ws_manager.broadcast_to_users(
+        await ws_manager.notify_incident(
             user_ids,
-            {
-                "event": "incident_detected",
-                "incident_id": str(incident.incident_id),
-                "danger_category": calculated_severity,
-                "incident_type": str(label).lower(),
-                "camera_id": str(camera_id),
-                "confidence": confidence,
-                "timestamp": incident.timestamp.isoformat(),
-                "incident_clip": clip_path_saved,
-                "stub": prediction.get("stub", False),
-            },
+            incident_id=incident.incident_id,
+            incident_type=str(label).lower(),
+            danger_category=calculated_severity,
+            camera_id=camera_id,
+            confidence=confidence,
+            timestamp=incident.timestamp,
+            incident_clip=clip_path_saved,
+            stub=prediction.get("stub", False),
         )
 
     return PredictionResponse(
@@ -147,11 +143,6 @@ async def predict(
         incident_created=incident_created,
         incident_id=incident_id,
     )
-
-
-# Cooldown tracking to prevent repeated notifications (in-memory cache)
-_detection_cooldowns: dict[tuple[str, str], float] = {}
-COOLDOWN_SECONDS = 60  # Prevent same detection type on same camera for 60 seconds
 
 
 @router.post("/detect", response_model=CombinedPredictionResponse)
@@ -201,136 +192,118 @@ async def detect_both(
     fall_confidence = fall_result["confidence"]
 
     if str(fall_label).lower() in positive_labels and fall_confidence >= settings.CONFIDENCE_THRESHOLD:
-        cooldown_key = (str(camera_id), "fall")
-        now = datetime.now().timestamp()
-        last_incident_time = _detection_cooldowns.get(cooldown_key, 0)
-        
-        if now - last_incident_time >= COOLDOWN_SECONDS:
-            from app.models.incident import Incident
+        from app.models.incident import Incident
 
-            # Calculate dynamic fall severity classification
-            fall_severity = "Critical" if fall_confidence >= 0.75 else "Warning"
+        # Calculate dynamic fall severity classification
+        fall_severity = "Critical" if fall_confidence >= 0.75 else "Warning"
 
-            incident = Incident(
-                danger_category=fall_severity,
-                incident_type=str(fall_label).lower(),
-                camera_id=camera_id,
-                confidence=fall_confidence,
-                status="open",
-                detections={"fall_detection": fall_result, "violence_detection": violence_result},
-            )
-            db.add(incident)
-            await db.flush()
-            await db.refresh(incident)
-            incident_created = True
-            _detection_cooldowns[cooldown_key] = now
+        incident = Incident(
+            danger_category=fall_severity,
+            incident_type=str(fall_label).lower(),
+            camera_id=camera_id,
+            confidence=fall_confidence,
+            status="open",
+            detections={"fall_detection": fall_result, "violence_detection": violence_result},
+        )
+        db.add(incident)
+        await db.flush()
+        await db.refresh(incident)
+        incident_created = True
 
-            # Save clip if provided
-            clip_path_saved = None
-            if clip is not None and image_bytes:
-                try:
-                    clips_dir = Path(settings.CLIPS_DIR)
-                    clips_dir.mkdir(parents=True, exist_ok=True)
-                    ext = Path(clip_filename or "clip.bin").suffix or ".bin"
-                    dest = clips_dir / f"{incident.incident_id}{ext}"
-                    dest.write_bytes(image_bytes)
-                    clip_path_saved = f"/incident_clips/{dest.name}"
-                    incident.incident_clip = clip_path_saved
-                    await db.flush()
-                except Exception as e:
-                    logger.warning(f"Could not save clip file: {e}")
+        # Save clip if provided
+        clip_path_saved = None
+        if clip is not None and image_bytes:
+            try:
+                clips_dir = Path(settings.CLIPS_DIR)
+                clips_dir.mkdir(parents=True, exist_ok=True)
+                ext = Path(clip_filename or "clip.bin").suffix or ".bin"
+                dest = clips_dir / f"{incident.incident_id}{ext}"
+                dest.write_bytes(image_bytes)
+                clip_path_saved = f"/incident_clips/{dest.name}"
+                incident.incident_clip = clip_path_saved
+                await db.flush()
+            except Exception as e:
+                logger.warning(f"Could not save clip file: {e}")
 
-            # Broadcast notification
-            user_ids = await _get_zone_users(camera_id, db)
-            await ws_manager.broadcast_to_users(
-                user_ids,
-                {
-                    "event": "incident_detected",
-                    "incident_id": str(incident.incident_id),
-                    "danger_category": fall_severity,
-                    "incident_type": str(fall_label).lower(),
-                    "camera_id": str(camera_id),
-                    "confidence": fall_confidence,
-                    "timestamp": incident.timestamp.isoformat(),
-                    "incident_clip": clip_path_saved,
-                    "stub": fall_result.get("stub", False),
-                },
-            )
+        # Hand over incident notification to notification service
+        user_ids = await _get_zone_users(camera_id, db)
+        await ws_manager.notify_incident(
+            user_ids,
+            incident_id=incident.incident_id,
+            incident_type="fall",
+            danger_category=fall_severity,
+            camera_id=camera_id,
+            confidence=fall_confidence,
+            timestamp=incident.timestamp,
+            incident_clip=clip_path_saved,
+            stub=fall_result.get("stub", False),
+        )
 
-            incidents.append({
-                "incident_id": str(incident.incident_id),
-                "danger_category": fall_severity,
-                "incident_type": str(fall_label).lower(),
-                "confidence": fall_confidence,
-            })
+        incidents.append({
+            "incident_id": str(incident.incident_id),
+            "danger_category": fall_severity,
+            "incident_type": str(fall_label).lower(),
+            "confidence": fall_confidence,
+        })
 
     # 2. Check cooldown and threshold for violence detection
     violence_label = violence_result["label"]
     violence_confidence = violence_result["confidence"]
 
     if str(violence_label).lower() in positive_labels and violence_confidence >= settings.VIOLENCE_CONFIDENCE_THRESHOLD:
-        cooldown_key = (str(camera_id), "violence")
-        now = datetime.now().timestamp()
-        last_incident_time = _detection_cooldowns.get(cooldown_key, 0)
-        
-        if now - last_incident_time >= COOLDOWN_SECONDS:
-            from app.models.incident import Incident
+        from app.models.incident import Incident
 
-            # Calculate dynamic violence severity classification
-            violence_severity = "Critical" if violence_confidence >= 0.75 else "Warning"
+        # Calculate dynamic violence severity classification
+        violence_severity = "Critical" if violence_confidence >= 0.75 else "Warning"
 
-            incident = Incident(
-                danger_category=violence_severity,
-                incident_type=str(violence_label).lower(),
-                camera_id=camera_id,
-                confidence=violence_confidence,
-                status="open",
-                detections={"fall_detection": fall_result, "violence_detection": violence_result},
-            )
-            db.add(incident)
-            await db.flush()
-            await db.refresh(incident)
-            incident_created = True
-            _detection_cooldowns[cooldown_key] = now
+        incident = Incident(
+            danger_category=violence_severity,
+            incident_type=str(violence_label).lower(),
+            camera_id=camera_id,
+            confidence=violence_confidence,
+            status="open",
+            detections={"fall_detection": fall_result, "violence_detection": violence_result},
+        )
+        db.add(incident)
+        await db.flush()
+        await db.refresh(incident)
+        incident_created = True
 
-            # Save clip if provided
-            clip_path_saved = None
-            if clip is not None and image_bytes:
-                try:
-                    clips_dir = Path(settings.CLIPS_DIR)
-                    clips_dir.mkdir(parents=True, exist_ok=True)
-                    ext = Path(clip_filename or "clip.bin").suffix or ".bin"
-                    dest = clips_dir / f"{incident.incident_id}{ext}"
-                    dest.write_bytes(image_bytes)
-                    clip_path_saved = f"/incident_clips/{dest.name}"
-                    incident.incident_clip = clip_path_saved
-                    await db.flush()
-                except Exception as e:
-                    logger.warning(f"Could not save clip file: {e}")
+        # Save clip if provided
+        clip_path_saved = None
+        if clip is not None and image_bytes:
+            try:
+                clips_dir = Path(settings.CLIPS_DIR)
+                clips_dir.mkdir(parents=True, exist_ok=True)
+                ext = Path(clip_filename or "clip.bin").suffix or ".bin"
+                dest = clips_dir / f"{incident.incident_id}{ext}"
+                dest.write_bytes(image_bytes)
+                clip_path_saved = f"/incident_clips/{dest.name}"
+                incident.incident_clip = clip_path_saved
+                await db.flush()
+            except Exception as e:
+                logger.warning(f"Could not save clip file: {e}")
 
-            # Broadcast notification
-            user_ids = await _get_zone_users(camera_id, db)
-            await ws_manager.broadcast_to_users(
-                user_ids,
-                {
-                    "event": "incident_detected",
-                    "incident_id": str(incident.incident_id),
-                    "danger_category": violence_severity,
-                    "incident_type": str(violence_label).lower(),
-                    "camera_id": str(camera_id),
-                    "confidence": violence_confidence,
-                    "timestamp": incident.timestamp.isoformat(),
-                    "incident_clip": clip_path_saved,
-                    "stub": violence_result.get("stub", False),
-                },
-            )
+        # Hand over incident notification to notification service
+        user_ids = await _get_zone_users(camera_id, db)
+        await ws_manager.notify_incident(
+            user_ids,
+            incident_id=incident.incident_id,
+            incident_type="violence",
+            danger_category=violence_severity,
+            camera_id=camera_id,
+            confidence=violence_confidence,
+            timestamp=incident.timestamp,
+            incident_clip=clip_path_saved,
+            stub=violence_result.get("stub", False),
+        )
 
-            incidents.append({
-                "incident_id": str(incident.incident_id),
-                "danger_category": violence_severity,
-                "incident_type": str(violence_label).lower(),
-                "confidence": violence_confidence,
-            })
+        incidents.append({
+            "incident_id": str(incident.incident_id),
+            "danger_category": violence_severity,
+            "incident_type": str(violence_label).lower(),
+            "confidence": violence_confidence,
+        })
 
     # Explicitly commit database transactions to persist tracked incidents
     await db.commit()
