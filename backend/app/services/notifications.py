@@ -9,8 +9,8 @@ logger = logging.getLogger(__name__)
 
 # Per-user, per-incident-type cooldowns (in seconds)
 INCIDENT_COOLDOWNS = {
-    "fall": 20,
-    "violence": 40,
+    "fall": 10,
+    "violence": 20,
 }
 
 # Cooldown tracking: {(user_id, camera_id, incident_type): last_notification_time}
@@ -66,10 +66,10 @@ class ConnectionManager:
         
         Cooldowns are enforced per user/camera/incident_type combination to avoid
         spamming the same user with multiple notifications of the same type.
-        - Fall detection: 20 second cooldown
-        - Violence detection: 40 second cooldown
+        - Fall detection: 10 second cooldown
+        - Violence detection: 20 second cooldown
         """
-        cooldown_seconds = INCIDENT_COOLDOWNS.get(incident_type, 20)
+        cooldown_seconds = INCIDENT_COOLDOWNS.get(incident_type, 10)
         now = datetime.now().timestamp()
         
         # Filter users who are not in cooldown
