@@ -21,7 +21,7 @@ This solution aims to reduce the reliance on continuous manual surveillance, min
 
 ### 🤖 AI Detection System
 * **Real-Time Fall Detection** - Identifies falls instantly using YOLO8s ONNX optimized models
-* **Violence/Aggression Detection** - Detects physical violence between children
+* **Real-Time Violence Detection** - Detects physical violence between children
 * **Confidence-Based Incident Classification** - Categorizes incidents as Critical (≥75% confidence) or Warning (<75%)
 * **Smart Notification Throttling** - Prevents alert fatigue with intelligent cooldown mechanisms
 
