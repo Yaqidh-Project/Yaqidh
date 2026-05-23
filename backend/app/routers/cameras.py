@@ -42,10 +42,9 @@ async def create_camera(
 ):
     """
     Provisions a new hardware camera record configuration.
-    The creator must have ownership permissions over the target zone.
+    Enforces a strict constraint: A zone can only have ONE camera attached.
     """
-    # Prevent Cross-Tenant Injection. 
-    # Verify the zone exists AND belongs to the calling user (Manager or Parent).
+    # 1. Verify zone exists and belongs to the calling user
     zone_result = await db.execute(
         select(Zone)
         .join(Zone.users)
@@ -55,6 +54,16 @@ async def create_camera(
         raise HTTPException(
             status_code=404, 
             detail="Zone not found or you do not have permission to add cameras to it."
+        )
+
+    # 2. Check if the zone already has a camera linked
+    existing_camera_result = await db.execute(
+        select(Camera).where(Camera.zone_id == payload.zone_id)
+    )
+    if existing_camera_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Validation failed: This zone already has an active camera assigned. Only one camera per zone is allowed."
         )
 
     # Initialize and persist the new camera node entity safely
