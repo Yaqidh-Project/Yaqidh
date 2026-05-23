@@ -20,10 +20,10 @@ This solution aims to reduce the reliance on continuous manual surveillance, min
 ## ✨ Key Features
 
 ### 🤖 AI Detection System
-* **Real-Time Fall Detection** - Identifies falls instantly using YOLO8s ONNX optimized models
-* **Real-Time Violence Detection** - Detects physical violence between children
+* **Real-Time Fall Detection** - Identifies falls instantly using YOLO8s ONNX optimized model
+* **Real-Time Violence Detection** - Detects physical violence between children using YOLO8s ONNX optimized model
 * **Confidence-Based Incident Classification** - Categorizes incidents as Critical (≥75% confidence) or Warning (<75%)
-* **Smart Notification Throttling** - Prevents alert fatigue with intelligent cooldown mechanisms
+* **Smart Notification Throttling** - Prevents alert spamming with intelligent cooldown mechanisms
 
 ### 🎯 Role-Based Dashboard
 * **Manager Dashboard** - System overview with KPIs, incident summaries, and zone/camera management
