@@ -279,3 +279,25 @@ Yaqidh/
 │
 └── README.md                      # This file
 ```
+## 👥 Contributors
+
+We are a team of **Artificial Intelligence students** from **Umm Al-Qura University** dedicated to building safer environments for children through intelligent vision systems.
+
+* **Renad Alharthi** — [![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white)](https://github.com/RenadAlh)
+* **Aliyah Alabdali** — [![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white)](https://github.com/AliyahAlabdali) 
+* **Rahaf Almalki** — [![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white)](https://github.com/RahafAlmalki) 
+* **Rawan Alahmadi** — [![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white)](https://github.com/iiRawanj) 
+
+## 📞 Contact Us
+
+For any inquiries, feedback, or collaboration opportunities, feel free to reach out to us:
+
+<a href="mailto:YaqidhTeam@gmail.com">
+  <img src="https://img.shields.io/badge/Gmail-D14836?style=for-the-badge&logo=gmail&logoColor=white" alt="Gmail" />
+</a>
+
+---
+
+<p align="center">
+  Made with ❤️ by Yaqidh Team
+</p>
