@@ -20,8 +20,8 @@ This solution aims to reduce the reliance on continuous manual surveillance, min
 ## ✨ Key Features
 
 ### 🤖 AI Detection System
-* **Real-Time Fall Detection** - Identifies falls instantly using ONNX-optimized models
-* **Violence/Aggression Detection** - Detects physical aggression between children or staff
+* **Real-Time Fall Detection** - Identifies falls instantly using YOLO8s ONNX optimized models
+* **Violence/Aggression Detection** - Detects physical violence between children
 * **Confidence-Based Incident Classification** - Categorizes incidents as Critical (≥75% confidence) or Warning (<75%)
 * **Smart Notification Throttling** - Prevents alert fatigue with intelligent cooldown mechanisms
 
@@ -40,7 +40,6 @@ This solution aims to reduce the reliance on continuous manual surveillance, min
 * **Incident Logging & Storage** - Auto-generated incident records with video clips
 * **Video Clip Archival** - Automatic storage and retrieval of incident footage
 * **Advanced Filtering & Search** - Filter incidents by type, date range, severity, and location
-* **Incident Status Tracking** - Manage incident lifecycle from detection to resolution
 
 ### 📈 Analytics & Reporting
 * **Dashboard Analytics** - Real-time KPIs and trend indicators
@@ -50,7 +49,7 @@ This solution aims to reduce the reliance on continuous manual surveillance, min
 
 ### 🔐 Authentication & Authorization
 * **JWT-Based Authentication** - Secure access tokens (15-min expiry) and refresh tokens (7-day expiry)
-* **Role-Based Access Control (RBAC)** - Three distinct roles with granular permissions (Manager, Teacher, Parent)
+* **Role-Based Access Control (RBAC)** - Three distinct roles with granular permissions (Manager, Teacher, Parent/Caregiver)
 * **Phone Verification (2FA)** - OTP-based phone verification for enhanced security
 * **Zone-Based Data Isolation** - Users can only access incidents and resources within their assigned zones
 
@@ -86,7 +85,7 @@ This solution aims to reduce the reliance on continuous manual surveillance, min
 * **Task Scheduling:** APScheduler for retention cleanup
 
 ### AI & Computer Vision
-* **Models:** YOLO-based ONNX models (fall_detection.onnx, violence_detection.onnx)
+* **Models:** YOLO8-based ONNX models (fall_detection.onnx, violence_detection.onnx)
 * **Inference Engine:** ONNX Runtime
 * **Preprocessing:** OpenCV for image/video processing
 * **Model Training:** Goggle Colab - view notebooks in `notebooks/`
@@ -101,67 +100,182 @@ This solution aims to reduce the reliance on continuous manual surveillance, min
 ## 🚀 Installation & Setup
 
 ### Prerequisites
-* Node.js (v16+)
-* npm (v8+)
 
-### Steps
-1.  **Clone the Repository**
-    ```bash
-    git clone [https://github.com/AliyahAlabdali/yaqidh.git]\   cd yaqidh
-    ```
+**Backend:**
+* Python 3.9+
+* pip or virtual environment manager (venv/conda)
+* PostgreSQL 12+
 
-2.  **Install Frontend Dependencies**
-    ```bash
-    npm install
-    ```
+**Frontend:**
+* Node.js 16+
+* npm 8+
 
-3.  **Run the Development Server**
-    ```bash
-    npm run dev
-    ```
-    The application will launch at `https://yaqidh.vercel.app/login`.
+### Backend Setup
+
+1. **Navigate to backend directory:**
+   ```bash
+   cd backend
+   ```
+
+2. **Create virtual environment:**
+   ```bash
+   python -m venv venv
+   
+   # Windows
+   venv\Scripts\activate
+   
+   # macOS/Linux
+   source venv/bin/activate
+   ```
+
+3. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Configure environment variables:**
+   ```bash
+   cp .env.example .env
+   ```
+   Edit `.env` and set:
+   ```env
+   DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/yaqidh
+   SECRET_KEY=your-super-secret-key-change-in-production
+   ALGORITHM=HS256
+   ACCESS_TOKEN_EXPIRE_MINUTES=15
+   REFRESH_TOKEN_EXPIRE_DAYS=7
+   CLIP_RETENTION_DAYS=30
+   CONFIDENCE_THRESHOLD=0.7
+   VIOLENCE_CONFIDENCE_THRESHOLD=0.4
+   PORT=8000
+   ```
+
+5. **Setup database:**
+   ```bash
+   python -m alembic upgrade head
+   ```
+
+6. **Start backend server:**
+   ```bash
+   bash start.sh
+   # or: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+   ```
+   Backend will be available at `http://localhost:8000/docs` (Swagger UI)
+
+### Frontend Setup
+
+1. **Navigate to frontend directory:**
+   ```bash
+   cd frontend
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+3. **Start development server:**
+   ```bash
+   npm run dev
+   ```
+   Frontend will be available at `http://localhost:5173`
+
+4. **Build for production:**
+   ```bash
+   npm run build
+   ```
+   Generates optimized build in `dist/`
 
 ---
 
 ## 📂 Project Structure
 
-```text
+```
 Yaqidh/
-├── Models/
-│   ├── Yaqidh_Fall_Model.ipynb
-│   ├── best.pt
-│   ├── Yaqidh_Violence_Model.ipynb
-│   └── Violence_best.pt
-├── public/
-│   ├── Yaqidh-logo.png
-│   └── vite.svg
-├── src/
-│   ├── assets/
-│   │   └── react.svg
-│   ├── components/
-│   │   └── Layout.jsx
-│   ├── pages/
-│   │   ├── About.jsx
-│   │   ├── Dashboard.jsx
-│   │   ├── ForgotPassword.jsx
-│   │   ├── Incidents.jsx
-│   │   ├── LiveMonitor.jsx
-│   │   ├── LiveMonitoring.jsx
-│   │   ├── Login.jsx
-│   │   ├── Register.jsx
-│   │   ├── Reports.jsx
-│   │   └── Settings.jsx
-│   ├── App.jsx
-│   ├── App.css
-│   ├── main.jsx
-│   └── index.css
-├── .gitignore
-├── README.md
-├── eslint.config.js
-├── index.html
-├── package-lock.json
-├── package.json
-├── postcss.config.js
-├── tailwind.config.js
-├── vercel.json
-└── vite.config.js
+├── backend/                          # FastAPI Python backend
+│   ├── app/
+│   │   ├── main.py                  # FastAPI app initialization
+│   │   ├── config.py                # Environment & settings
+│   │   ├── database.py              # SQLAlchemy async setup
+│   │   ├── auth/
+│   │   │   ├── jwt.py              # JWT token creation/validation
+│   │   │   └── dependencies.py     # Auth dependency injection
+│   │   ├── models/                 # Database ORM models
+│   │   │   ├── user.py            # User model (roles, zones, notifications)
+│   │   │   ├── zone.py            # Zone model (grouping cameras & users)
+│   │   │   ├── camera.py          # Camera model (video sources)
+│   │   │   ├── incident.py        # Incident model (detected events)
+│   │   │   ├── report.py          # Report model (analytics)
+│   │   │   ├── phone_code.py      # Phone verification OTP codes
+│   │   │   └── enums.py           # Role, category, incident type enums
+│   │   ├── schemas/                # Pydantic request/response schemas
+│   │   ├── routers/                # API endpoint handlers
+│   │   │   ├── auth.py            # Registration, login, phone verification
+│   │   │   ├── users.py           # User CRUD & profile management
+│   │   │   ├── zones.py           # Zone CRUD & user assignment
+│   │   │   ├── cameras.py         # Camera CRUD & configuration
+│   │   │   ├── incidents.py       # Incident CRUD & filtering
+│   │   │   ├── reports.py         # Report generation & analytics
+│   │   │   ├── inference.py       # AI model inference endpoints
+│   │   │   ├── websocket.py       # WebSocket notifications
+│   │   │   ├── clips.py           # Video clip streaming
+│   │   │   └── manager.py         # Manager-specific operations
+│   │   └── services/               # Business logic & AI
+│   │       ├── inference.py       # ONNX model loading & prediction
+│   │       ├── notifications.py   # WebSocket manager & cooldown logic
+│   │       └── retention.py       # Clip retention cleanup task
+│   ├── alembic/                    # Database migrations
+│   │   ├── versions/
+│   │   │   ├── 0001_initial_schema.py              # Core tables
+│   │   │   ├── 0002_security_enhancements.py       # Phone verification
+│   │   │   └── 0003_type_safety_and_schema.py      # Type improvements
+│   │   └── env.py                 # Migration environment config
+│   ├── incident_clips/             # Stored video clips
+│   ├── models/                     # ONNX model weights
+│   │   ├── fall_detection.onnx
+│   │   └── violence_detection.onnx
+│   ├── requirements.txt            # Python dependencies
+│   ├── start.sh                    # Backend startup script
+│   └── README.md                   # Backend documentation
+│
+├── frontend/                        # React + Vite web application
+│   ├── src/
+│   │   ├── App.jsx                # Main router & auth wrapper
+│   │   ├── main.jsx               # React entry point
+│   │   ├── App.css                # Global styles
+│   │   ├── index.css              # Base styles
+│   │   ├── pages/
+│   │   │   ├── Dashboard.jsx      # Manager/Parent dashboard overview
+│   │   │   ├── LiveMonitoring.jsx # Real-time video feed control
+│   │   │   ├── Incidents.jsx      # Incident log & viewer
+│   │   │   ├── Reports.jsx        # Analytics & reporting dashboard
+│   │   │   ├── Settings.jsx       # Profile, notifications, user/camera management
+│   │   │   ├── Login.jsx          # Authentication form
+│   │   │   ├── Register.jsx       # User registration (2-step)
+│   │   │   ├── ForgotPassword.jsx # Password reset request
+│   │   │   └── About.jsx          # System information page
+│   │   ├── components/
+│   │   │   └── Layout.jsx         # Sidebar navigation & app shell
+│   │   └── assets/                # Images, icons, etc.
+│   ├── package.json               # Node.js dependencies
+│   ├── vite.config.js             # Vite build configuration
+│   ├── tailwind.config.js         # Tailwind CSS theming
+│   ├── postcss.config.js          # PostCSS configuration
+│   ├── index.html                 # HTML entry point
+│   └── README.md                  # Frontend documentation
+│
+├── notebooks/                      # AI Model Training
+│   ├── fall model/
+│   │   ├── Yaqidh_Fall_Detection_Model.ipynb
+│   │   └── fall_best.pt           # PyTorch model checkpoint
+│   └── violence model/
+│       ├── Yaqidh_Violence_Detection_Model.ipynb
+│       └── violence_best.pt       # PyTorch model checkpoint
+│
+├── tests/                         # Integration tests
+│   └── parallel_detection_test/
+│       ├── test_realtime_camera.py
+│       └── INTEGRATION_TESTING.md
+│
+└── README.md                      # This file
+```
