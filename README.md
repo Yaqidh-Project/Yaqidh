@@ -292,9 +292,7 @@ We are a team of **Artificial Intelligence students** from **Umm Al-Qura Univers
 
 For any inquiries, feedback, or collaboration opportunities, feel free to reach out to us:
 
-<a href="mailto:YaqidhTeam@gmail.com">
-  <img src="https://img.shields.io/badge/Gmail-D14836?style=for-the-badge&logo=gmail&logoColor=white" alt="Gmail" />
-</a>
+`YaqidhTeam@gmail.com`
 
 ---
 
