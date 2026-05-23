@@ -4,6 +4,13 @@ import logging
 import uuid
 from datetime import datetime
 from fastapi import WebSocket
+from sqlalchemy import select
+
+from app.services.email import send_incident_email
+from app.models.user import User
+from app.models.zone import Zone
+from app.models.camera import Camera
+from app.database import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -99,8 +106,60 @@ class ConnectionManager:
             "stub": stub,
         }
         
-        # Broadcast to users not in cooldown
-        await self.broadcast_to_users(users_to_notify, payload)
+        # Fetch zone name for email
+        async with AsyncSessionLocal() as db:
+            zone_result = await db.execute(
+                select(Zone)
+                .join(Camera)
+                .where(Camera.camera_id == camera_id)
+            )
+            zone = zone_result.scalar_one_or_none()
+            zone_name = zone.zone_name if zone else "Unknown Zone"
+        
+        # Fetch camera name for email
+        async with AsyncSessionLocal() as db:
+            camera_result = await db.execute(
+                select(Camera)
+                .where(Camera.camera_id == camera_id)
+            )
+            camera = camera_result.scalar_one_or_none()
+            camera_name = camera.camera_name if camera else None
+        
+        # Fetch all user emails for users to notify
+        async with AsyncSessionLocal() as db:
+            users_result = await db.execute(
+                select(User).where(User.user_id.in_(users_to_notify))
+            )
+            users = {str(u.user_id): u.email for u in users_result.scalars().all()}
+        
+        # Build tasks for WebSocket and Email sends in parallel
+        tasks = []
+        
+        # WebSocket broadcast for all users
+        message = json.dumps(payload)
+        for uid in users_to_notify:
+            key = str(uid)
+            for ws in self._connections.get(key, []):
+                tasks.append(self._safe_send(ws, message))
+        
+        # Email send for each user (in parallel with WebSocket)
+        for uid in users_to_notify:
+            if str(uid) in users:
+                tasks.append(
+                    send_incident_email(
+                        user_email=users[str(uid)],
+                        incident_type=incident_type,
+                        zone_name=zone_name,
+                        timestamp=timestamp,
+                        confidence=confidence,
+                        incident_clip_url=incident_clip,
+                        camera_name=camera_name
+                    )
+                )
+        
+        # Execute all tasks in parallel (WebSocket + Email)
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _safe_send(self, websocket: WebSocket, message: str):
         try:
