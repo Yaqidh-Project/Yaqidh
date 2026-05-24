@@ -1,4 +1,5 @@
 import aiosmtplib
+import os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
@@ -19,30 +20,22 @@ async def send_incident_email(
 ) -> bool:
     """
     Send incident notification email via Gmail SMTP.
-    
-    Args:
-        user_email: Recipient email address
-        incident_type: "fall" or "violence"
-        zone_name: Name of the zone where incident occurred
-        timestamp: When the incident was detected
-        confidence: Model confidence score (0.0-1.0)
-        incident_clip_url: URL to video clip (optional)
-        camera_name: Name of the camera (optional)
-    
-    Returns:
-        True if email sent successfully
-        False if email sending failed (will not raise exception)
     """
     settings = get_settings()
     
-    # Build email subject
+    test_email = os.getenv("MANAGER_TEST_EMAIL")
+    if test_email:
+        email_recipient = test_email
+        logger.info(f"Using test email override: {test_email}")
+    else:
+        email_recipient = user_email
+        logger.info(f"Using production email: {user_email}")
+    
     subject = f"🚨 {incident_type.capitalize()} Detected in {zone_name}"
     
-    # Format timestamp and confidence for display
     timestamp_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
     confidence_pct = confidence * 100
     
-    # Build HTML body with optional video link
     video_link = f'<p><a href="{incident_clip_url}">View Video</a></p>' if incident_clip_url else ""
     
     body = f"""<!DOCTYPE html>
@@ -60,21 +53,25 @@ async def send_incident_email(
 </html>"""
     
     try:
-        async with aiosmtplib.SMTP(hostname=settings.SMTP_HOST, port=settings.SMTP_PORT) as smtp:
+        async with aiosmtplib.SMTP(
+            hostname=settings.SMTP_HOST, 
+            port=settings.SMTP_PORT, 
+            start_tls=True
+        ) as smtp:
             await smtp.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
             
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
             msg["From"] = settings.SENDER_EMAIL
-            msg["To"] = user_email
+            msg["To"] = email_recipient
             
             msg.attach(MIMEText(body, "html"))
             
-            await smtp.sendmail(settings.SENDER_EMAIL, user_email, msg.as_string())
+            await smtp.sendmail(settings.SENDER_EMAIL, email_recipient, msg.as_string())
         
-        logger.info(f"Email sent to {user_email} for {incident_type} incident")
+        logger.info(f"Email sent to {email_recipient} for {incident_type} incident")
         return True
     
     except Exception as e:
-        logger.error(f"Failed to send email to {user_email}: {str(e)}")
+        logger.error(f"Failed to send email to {email_recipient}: {str(e)}")
         return False
