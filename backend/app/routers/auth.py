@@ -91,18 +91,26 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)):
 async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     """
     Authenticates account holders and returns cryptographic claim assertions (JWT).
+    Separates error responses to enhance front-end dynamic user feedback.
     """
     result = await db.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
     
-    # Credentials assertion validation
-    if not user or not _verify_password(payload.password, user.password):
+    # 1. Condition: Account email cannot be traced within pgAdmin database context
+    if not user:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Account does not exist. Please register first.",
         )
         
-    # Check current functional persistence execution state flags
+    # 2. Condition: Account exists but cryptographic password verification failed
+    if not _verify_password(payload.password, user.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password. Please try again.",
+        )
+        
+    # 3. Check current functional persistence execution state flags
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

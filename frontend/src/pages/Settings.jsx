@@ -1,64 +1,60 @@
 import React, { useState, useEffect } from 'react';
-import { User, Bell, Camera, Users, BarChart3, Upload, Plus, Edit2, Trash2 } from 'lucide-react';
+import { User, Bell, Camera, Users, Upload, Plus, Edit2, Trash2, RefreshCw } from 'lucide-react';
+import axiosInstance from '../api/axiosInstance';
 
 const TabButton = ({ tab, activeTab, onClick, label }) => (
   <button
     onClick={() => onClick(tab)}
     className={`px-4 py-3 rounded-xl font-medium transition duration-200 ${
-      activeTab === tab
-        ? 'bg-brand-500 text-white'
-        : 'text-slate-600 hover:bg-slate-100'
+      activeTab === tab ? 'bg-brand-500 text-white' : 'text-slate-600 hover:bg-slate-100'
     }`}
   >
     {label}
   </button>
 );
 
-// Tab 1: Edit Profile
+// Tab 1: Edit Profile (Dynamic Binding)
 const EditProfile = () => {
-  const [profileData, setProfileData] = useState({
-    name: 'Sara Ahmed',
-    email: 'sara.ahmed@example.com',
-    phone: '+966 00 000 0000',
-  });
-  const [picture, setPicture] = useState(null);
+  const [profileData, setProfileData] = useState({ name: '', email: '', phone: '' });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Fetches account details from backend dependency injectors
+    axiosInstance.get('/users/me')
+      .then(res => {
+        setProfileData({
+          name: res.data.full_name || '',
+          email: res.data.email || '',
+          phone: res.data.phone_number || ''
+        });
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error("Error loading account profiles:", err);
+        setLoading(false);
+      });
+  }, []);
 
   const handleProfileChange = (e) => {
     const { name, value } = e.target;
     setProfileData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handlePictureUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setPicture(file.name);
-    }
+  const handleSave = () => {
+    axiosInstance.patch('/users/me', {
+      full_name: profileData.name,
+      phone_number: profileData.phone
+    })
+    .then(() => alert("Profile information securely committed."))
+    .catch(err => console.error("Failed to commit profile updates:", err));
   };
+
+  if (loading) return <div className="text-slate-400 font-mono text-xs py-4">LOADING ACCOUNT INFORMATION...</div>;
 
   return (
     <div className="space-y-6">
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
         <h3 className="text-lg font-semibold text-slate-800 mb-6">Profile Information</h3>
-
-        {/* Profile Picture */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-slate-700 mb-3">Profile Picture</label>
-          <div className="flex items-center gap-4">
-            <div className="w-20 h-20 bg-brand-100 rounded-xl flex items-center justify-center">
-              <User className="text-brand-500" size={32} />
-            </div>
-            <div>
-              <label className="inline-block px-4 py-2 bg-brand-500 text-white rounded-xl cursor-pointer hover:bg-brand-600 transition font-medium text-sm">
-                <Upload size={16} className="inline mr-2" />
-                Upload Picture
-                <input type="file" accept="image/*" onChange={handlePictureUpload} hidden />
-              </label>
-              {picture && <p className="text-sm text-slate-600 mt-2">{picture}</p>}
-            </div>
-          </div>
-        </div>
-
-        {/* Form Fields */}
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Full Name</label>
@@ -76,8 +72,8 @@ const EditProfile = () => {
               type="email"
               name="email"
               value={profileData.email}
-              onChange={handleProfileChange}
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
+              disabled
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 text-slate-400 cursor-not-allowed"
             />
           </div>
           <div>
@@ -91,8 +87,7 @@ const EditProfile = () => {
             />
           </div>
         </div>
-
-        <button className="mt-6 w-full bg-brand-500 hover:bg-brand-600 text-white font-semibold py-3 rounded-xl transition">
+        <button onClick={handleSave} className="mt-6 w-full bg-brand-500 hover:bg-brand-600 text-white font-semibold py-3 rounded-xl transition">
           Save Changes
         </button>
       </div>
@@ -100,12 +95,11 @@ const EditProfile = () => {
   );
 };
 
-// Tab 2: Notifications
+// Tab 2: Notifications (Removed SMS Per Project Specifications)
 const NotificationsTab = () => {
   const [notifications, setNotifications] = useState({
-    sms: true,
     email: true,
-    app: false,
+    app: true,
     dashboardIndicators: true,
   });
 
@@ -117,36 +111,16 @@ const NotificationsTab = () => {
     <div className="space-y-6">
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
         <h3 className="text-lg font-semibold text-slate-800 mb-6">Notification Channels</h3>
-
         <div className="space-y-4">
           <div className="flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:bg-slate-50 transition">
             <div>
-              <p className="font-medium text-slate-800">SMS Notifications</p>
-              <p className="text-sm text-slate-500">Receive alerts via SMS</p>
-            </div>
-            <button
-              onClick={() => toggleNotification('sms')}
-              className={`px-4 py-2 rounded-xl font-medium text-sm transition ${
-                notifications.sms
-                  ? 'bg-safe text-white'
-                  : 'bg-slate-200 text-slate-600'
-              }`}
-            >
-              {notifications.sms ? 'On' : 'Off'}
-            </button>
-          </div>
-
-          <div className="flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:bg-slate-50 transition">
-            <div>
               <p className="font-medium text-slate-800">Email Notifications</p>
-              <p className="text-sm text-slate-500">Receive alerts via email</p>
+              <p className="text-sm text-slate-500">Receive structural safety alerts via validated emails</p>
             </div>
             <button
               onClick={() => toggleNotification('email')}
               className={`px-4 py-2 rounded-xl font-medium text-sm transition ${
-                notifications.email
-                  ? 'bg-safe text-white'
-                  : 'bg-slate-200 text-slate-600'
+                notifications.email ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
               }`}
             >
               {notifications.email ? 'On' : 'Off'}
@@ -155,15 +129,13 @@ const NotificationsTab = () => {
 
           <div className="flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:bg-slate-50 transition">
             <div>
-              <p className="font-medium text-slate-800">Mobile App Notifications</p>
-              <p className="text-sm text-slate-500">Receive push notifications</p>
+              <p className="font-medium text-slate-800">Mobile Push System</p>
+              <p className="text-sm text-slate-500">Receive real-time persistent hardware push signals</p>
             </div>
             <button
               onClick={() => toggleNotification('app')}
               className={`px-4 py-2 rounded-xl font-medium text-sm transition ${
-                notifications.app
-                  ? 'bg-safe text-white'
-                  : 'bg-slate-200 text-slate-600'
+                notifications.app ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
               }`}
             >
               {notifications.app ? 'On' : 'Off'}
@@ -171,174 +143,114 @@ const NotificationsTab = () => {
           </div>
         </div>
       </div>
-
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-        <h3 className="text-lg font-semibold text-slate-800 mb-6">Dashboard Display</h3>
-
-        <div className="flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:bg-slate-50 transition">
-          <div>
-            <p className="font-medium text-slate-800">Color Indicators</p>
-            <p className="text-sm text-slate-500">Show status colors on dashboard</p>
-          </div>
-          <button
-            onClick={() => toggleNotification('dashboardIndicators')}
-            className={`px-4 py-2 rounded-xl font-medium text-sm transition ${
-              notifications.dashboardIndicators
-                ? 'bg-safe text-white'
-                : 'bg-slate-200 text-slate-600'
-            }`}
-          >
-            {notifications.dashboardIndicators ? 'On' : 'Off'}
-          </button>
-        </div>
-      </div>
     </div>
   );
 };
 
-// Tab 3: Manage Cameras (Conditional Data)
+// Tab 3: Manage Cameras (Dynamic Persistence Mapped to Databases)
 const ManageCameras = ({ role }) => {
-  // Define camera sets
-  const managerCameras = [
-    { id: 1, name: 'Outdoor Playground Cam', ip: '192.168.1.11', zone: 'Outdoor Playground', status: 'Online' },
-    { id: 2, name: 'Classroom A cam', ip: '192.168.1.12', zone: 'Classroom A', status: 'Offline' },
-    { id: 3, name: 'Classroom B cam', ip: '192.168.1.13', zone: 'Classroom B', status: 'Online' },
-    { id: 4, name: 'Classroom C cam', ip: '192.168.1.14', zone: 'Classroom C', status: 'Online' },
-  ];
-
-  const parentCameras = [
-    { id: 1, name: 'Living Room', ip: '192.168.0.5', zone: 'Living Area', status: 'Online' },
-    { id: 2, name: 'Baby\'s Bedroom', ip: '192.168.0.6', zone: 'Bedroom', status: 'Online' },
-    { id: 3, name: 'Garden / Backyard', ip: '192.168.0.7', zone: 'Garden', status: 'Offline' },
-  ];
-
   const [cameras, setCameras] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [formData, setFormData] = useState({ name: '', ip: '', zone: '', status: 'Online' });
+  const [formData, setFormData] = useState({ name: '', ip: '', zone_id: '', status: 'Online' });
+  const [zones, setZones] = useState([]);
 
-  // Initialize cameras based on role
-  useEffect(() => {
-    if (role === 'manager') {
-      setCameras(managerCameras);
-    } else {
-      setCameras(parentCameras);
-    }
-  }, [role]);
-
-  const handleAddCamera = () => {
-    if (formData.name && formData.ip && formData.zone) {
-      if (editingId) {
-        setCameras(cameras.map(c => c.id === editingId ? { ...c, ...formData } : c));
-        setEditingId(null);
-      } else {
-        setCameras([...cameras, { id: Date.now(), ...formData }]);
-      }
-      setFormData({ name: '', ip: '', zone: '', status: 'Online' });
-      setShowForm(false);
-    }
+  const fetchCamerasAndZones = () => {
+    setLoading(true);
+    // Concurrent request tracking matrix maps zones alongside assigned cameras
+    Promise.all([axiosInstance.get('/cameras'), axiosInstance.get('/zones')])
+      .then(([camRes, zoneRes]) => {
+        setCameras(camRes.data);
+        setZones(zoneRes.data);
+        setLoading(false)
+      })
+      .catch(err => {
+        console.error("Database tracking extraction failure:", err);
+        setLoading(false);
+      });
   };
 
-  const handleEdit = (camera) => {
-    setFormData(camera);
-    setEditingId(camera.id);
-    setShowForm(true);
+  useEffect(() => {
+    fetchCamerasAndZones();
+  }, []);
+
+  const handleAddCamera = () => {
+    if (editingId) {
+      axiosInstance.patch(`/cameras/${editingId}`, { camera_name: formData.name, ip_address: formData.ip })
+        .then(() => {
+          fetchCamerasAndZones();
+          setShowForm(false);
+          setEditingId(null);
+        });
+    } else {
+      axiosInstance.post('/cameras', { camera_name: formData.name, ip_address: formData.ip, zone_id: formData.zone_id })
+        .then(() => {
+          fetchCamerasAndZones();
+          setShowForm(false);
+        });
+    }
   };
 
   const handleDelete = (id) => {
-    setCameras(cameras.filter(c => c.id !== id));
+    if(window.confirm("Confirm permanent hardware camera mapping deletion?")) {
+      axiosInstance.delete(`/cameras/${id}`).then(() => fetchCamerasAndZones());
+    }
   };
+
+  if (loading) return <div className="text-slate-400 font-mono text-xs py-4">LOADING CAMERAS CONFIGURATIONS...</div>;
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold text-slate-800">
-          {role === 'manager' ? 'Nursery Camera System' : 'Home Monitoring System'}
+          {role === 'manager' ? 'Nursery Camera Topology' : 'Home Infrastructure System'}
         </h3>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-medium transition flex items-center gap-2"
-        >
+        <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-medium transition flex items-center gap-2">
           <Plus size={20} /> Add Camera
         </button>
       </div>
 
       {showForm && (
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <h4 className="font-semibold text-slate-800 mb-4">{editingId ? 'Edit Camera' : 'Add New Camera'}</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input
-              placeholder="Camera Name"
-              value={formData.name}
-              onChange={(e) => setFormData({...formData, name: e.target.value})}
-              className="px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-            <input
-              placeholder="IP Address"
-              value={formData.ip}
-              onChange={(e) => setFormData({...formData, ip: e.target.value})}
-              className="px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-            <input
-              placeholder="Zone (e.g., Bedroom, Play Area)"
-              value={formData.zone}
-              onChange={(e) => setFormData({...formData, zone: e.target.value})}
-              className="px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-            <select
-              value={formData.status}
-              onChange={(e) => setFormData({...formData, status: e.target.value})}
-              className="px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
-            >
-              <option value="Online">Online</option>
-              <option value="Offline">Offline</option>
-            </select>
-          </div>
-          <div className="flex gap-2 mt-4">
-            <button
-              onClick={handleAddCamera}
-              className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-medium transition"
-            >
-              {editingId ? 'Update' : 'Add'}
-            </button>
-            <button
-              onClick={() => {setShowForm(false); setEditingId(null); setFormData({ name: '', ip: '', zone: '', status: 'Online' });}}
-              className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-medium transition"
-            >
-              Cancel
-            </button>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+          <input
+            placeholder="Camera Reference Name"
+            value={formData.name}
+            onChange={(e) => setFormData({...formData, name: e.target.value})}
+            className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none"
+          />
+          <input
+            placeholder="Hardware Static IP Address"
+            value={formData.ip}
+            onChange={(e) => setFormData({...formData, ip: e.target.value})}
+            className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none"
+          />
+          <select
+            value={formData.zone_id}
+            onChange={(e) => setFormData({...formData, zone_id: e.target.value})}
+            className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white"
+          >
+            <option value="">Select Target Deployment Zone Location</option>
+            {zones.map(z => <option key={z.zone_id} value={z.zone_id}>{z.zone_name}</option>)}
+          </select>
+          <div className="flex gap-2">
+            <button onClick={handleAddCamera} className="px-4 py-2 bg-brand-500 text-white rounded-xl">Commit</button>
+            <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-slate-200 rounded-xl">Cancel</button>
           </div>
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {cameras.map(camera => (
-          <div key={camera.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-            <div className="flex items-start justify-between mb-3">
-              <h4 className="font-semibold text-slate-800">{camera.name}</h4>
-              <div className="flex flex-col items-center">
-                <span
-                  className={`px-4 py-2 rounded-full text-sm font-medium ${camera.status === 'Online' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}
-                >
-                  {camera.status === 'Online' ? 'Active' : 'Offline'}
-                </span>
-              </div>
+          <div key={camera.camera_id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+            <div>
+              <h4 className="font-semibold text-slate-800 mb-2">{camera.camera_name}</h4>
+              <p className="text-xs text-slate-500">IP Link: {camera.ip_address}</p>
+              <p className="text-xs text-slate-500">Zone Key: {camera.zone_name || 'Assigned'}</p>
             </div>
-            <p className="text-sm text-slate-600 mb-1">IP: {camera.ip}</p>
-            <p className="text-sm text-slate-600 mb-3">Zone: {camera.zone}</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleEdit(camera)}
-                className="flex-1 px-2 py-2 bg-brand-100 hover:bg-brand-200 text-brand-600 rounded-lg font-medium text-sm transition flex items-center justify-center gap-1"
-              >
-                <Edit2 size={16} /> Edit
-              </button>
-              <button
-                onClick={() => handleDelete(camera.id)}
-                className="flex-1 px-4 py-2 bg-danger text-white rounded-lg font-medium text-sm transition hover:bg-danger-dark"
-              >
-                Remove
-              </button>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => { setEditingId(camera.camera_id); setFormData({name: camera.camera_name, ip: camera.ip_address, zone_id: camera.zone_id}); setShowForm(true); }} className="flex-1 py-2 bg-slate-50 text-slate-600 rounded-lg flex justify-center items-center text-xs gap-1"><Edit2 size={12}/> Edit</button>
+              <button onClick={() => handleDelete(camera.camera_id)} className="flex-1 py-2 bg-red-50 text-red-600 rounded-lg text-xs flex justify-center items-center gap-1"><Trash2 size={12}/> Remove</button>
             </div>
           </div>
         ))}
@@ -347,108 +259,81 @@ const ManageCameras = ({ role }) => {
   );
 };
 
-// Tab 4: User Management (Manager Only)
+// Tab 4: Teacher Provisioning (Manager Administrative Bound Context)
 const UserManagement = () => {
-  const [users, setUsers] = useState([
-    { id: 1, email: 'teacher1@nursery.com', zone: 'Nap Room', role: 'Teacher' },
-    { id: 2, email: 'teacher2@nursery.com', zone: 'Play Area', role: 'Teacher' },
-  ]);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({ email: '', zone: '', role: 'Teacher' });
+  const [formData, setFormData] = useState({ email: '', password: '', full_name: '', phone_number: '' });
+
+  const fetchTeachers = () => {
+    setLoading(true);
+    axiosInstance.get('/manager/teachers') // Routes through designated management endpoints
+      .then(res => {
+        setUsers(res.data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error("Failed to extract active teacher directories:", err);
+        setLoading(false);
+      });
+  };
+
+  useEffect(() => { fetchTeachers(); }, []);
 
   const handleAddUser = () => {
-    if (formData.email && formData.zone) {
-      setUsers([...users, { id: Date.now(), ...formData }]);
-      setFormData({ email: '', zone: '', role: 'Teacher' });
+    axiosInstance.post('/manager/provision-teacher', {
+      email: formData.email,
+      password: formData.password,
+      full_name: formData.full_name,
+      phone_number: formData.phone_number
+    })
+    .then(() => {
+      fetchTeachers();
       setShowForm(false);
-    }
+      setFormData({ email: '', password: '', full_name: '', phone_number: '' });
+    })
+    .catch(err => alert(err.response?.data?.detail || "Provision failure"));
   };
 
-  const handleRemoveUser = (id) => {
-    setUsers(users.filter(u => u.id !== id));
-  };
+  if (loading) return <div className="text-slate-400 font-mono text-xs py-4">SYNCING STAFF PROVISIONS...</div>;
 
   return (
     <div className="space-y-6">
       <div className="flex justify-end">
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-medium transition flex items-center gap-2"
-        >
-          <Plus size={20} /> Add Teacher
+        <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-medium transition flex items-center gap-2">
+          <Plus size={20} /> Add Staff Teacher
         </button>
       </div>
 
       {showForm && (
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <h4 className="font-semibold text-slate-800 mb-4">Add New Teacher</h4>
-          <div className="space-y-4">
-            <input
-              placeholder="Email Address"
-              value={formData.email}
-              onChange={(e) => setFormData({...formData, email: e.target.value})}
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-            <input
-              type="password"
-              placeholder="Temporary Password"
-              value={formData.password}
-              onChange={(e) => setFormData({...formData, password: e.target.value})}
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-            <input
-              placeholder="Assigned Zone"
-              value={formData.zone}
-              onChange={(e) => setFormData({...formData, zone: e.target.value})}
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-            
-          </div>
-          <div className="flex gap-2 mt-4">
-            <button
-              onClick={handleAddUser}
-              className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-medium transition"
-            >
-              Add Teacher
-            </button>
-            <button
-              onClick={() => setShowForm(false)}
-              className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-medium transition"
-            >
-              Cancel
-            </button>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-3">
+          <input placeholder="Full Legal Name" value={formData.full_name} onChange={(e) => setFormData({...formData, full_name: e.target.value})} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none" />
+          <input placeholder="Staff Institution Email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none" />
+          <input placeholder="Mobile Contact Sequence" value={formData.phone_number} onChange={(e) => setFormData({...formData, phone_number: e.target.value})} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none" />
+          <input type="password" placeholder="Temporary System Password Key" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none" />
+          <div className="flex gap-2">
+            <button onClick={handleAddUser} className="px-4 py-2 bg-brand-500 text-white rounded-xl">Provision Access</button>
+            <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-slate-200 rounded-xl">Cancel</button>
           </div>
         </div>
       )}
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-        <table className="w-full">
+        <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50">
-              <th className="text-left px-6 py-3 font-semibold text-slate-700">Email</th>
-              <th className="text-left px-6 py-3 font-semibold text-slate-700">Zone</th>
-              <th className="text-left px-6 py-3 font-semibold text-slate-700">Role</th>
-              <th className="text-left px-6 py-3 font-semibold text-slate-700">Action</th>
+            <tr className="border-b border-slate-200 bg-slate-50 text-slate-700 text-sm font-semibold">
+              <th className="p-4">Name</th>
+              <th className="p-4">Email Address</th>
+              <th className="p-4">Scope Scope Privilege</th>
             </tr>
           </thead>
           <tbody>
-            {users.map(user => (
-              <tr key={user.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
-                <td className="px-6 py-4 text-slate-700">{user.email}</td>
-                <td className="px-6 py-4 text-slate-700">{user.zone}</td>
-                <td className="px-6 py-4">
-                  <span className="px-3 py-1 bg-brand-100 text-brand-600 rounded-full text-sm font-medium">
-                    {user.role}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <button
-                    onClick={() => handleRemoveUser(user.id)}
-                    className="text-danger hover:text-danger hover:underline font-medium text-sm"
-                  >
-                    Remove
-                  </button>
-                </td>
+            {users.map(u => (
+              <tr key={u.user_id} className="border-b border-slate-100 text-slate-700 hover:bg-slate-50/50">
+                <td className="p-4 font-medium">{u.full_name}</td>
+                <td className="p-4 text-slate-500">{u.email}</td>
+                <td className="p-4"><span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 font-bold rounded-lg text-xs">TEACHER</span></td>
               </tr>
             ))}
           </tbody>
@@ -458,49 +343,51 @@ const UserManagement = () => {
   );
 };
 
-// Tab 5: Performance & Routing
+// Tab 5: Dynamic Performance Matrices Analytics
 const PerformanceTab = () => {
-  const zoneData = [
-    { zone: 'Play Area', alerts: 12, avgResponse: '1.2m' },
-    { zone: 'Nap Room', alerts: 8, avgResponse: '0.8m' },
-    { zone: 'Cafeteria', alerts: 3, avgResponse: '1.5m' },
-    { zone: 'Classrooms', alerts: 5, avgResponse: '2.3m' },
-  ];
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    axiosInstance.get('/manager/performance-dashboard')
+      .then(res => setStats(res.data))
+      .catch(err => console.error("Could not trace historic analytical graphs:", err));
+  }, []);
+
+  if (!stats) return <div className="text-slate-400 font-mono text-xs py-4">MAPPING ANALYTICAL MATRICES...</div>;
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">Alert Distribution by Zone</h3>
-          <div className="space-y-3">
-            {zoneData.map((item, idx) => (
+          <h3 className="text-lg font-semibold text-slate-800 mb-4">Alert Distributions Mapped by Zone Areas</h3>
+          <div className="space-y-4">
+            {stats.zones_performance?.map((item, idx) => (
               <div key={idx}>
                 <div className="flex items-center justify-between mb-1">
-                  <p className="font-medium text-slate-700">{item.zone}</p>
-                  <p className="text-sm text-slate-600">{item.alerts} alerts</p>
+                  <p className="font-medium text-slate-700 text-sm">{item.zone_name}</p>
+                  <p className="text-xs text-slate-500 font-bold">{item.total_incidents} logged security incidents</p>
                 </div>
-                <div className="w-full bg-slate-200 rounded-full h-2">
-                  <div
-                    className="bg-brand-500 h-2 rounded-full"
-                    style={{ width: `${(item.alerts / 12) * 100}%` }}
-                  ></div>
+                <div className="w-full bg-slate-100 rounded-full h-2">
+                  <div className="bg-indigo-600 h-2 rounded-full transition-all duration-500" style={{ width: `${Math.min((item.total_incidents / 20) * 100, 100)}%` }}></div>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">Average Response Time</h3>
-          <div className="space-y-3">
-            {zoneData.map((item, idx) => (
-              <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
-                <p className="font-medium text-slate-700">{item.zone}</p>
-                <p className="text-brand-600 font-semibold">{item.avgResponse}</p>
-              </div>
-            ))}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-800 mb-4">Mean Average Staff Latency Delay Profiles</h3>
+            <div className="space-y-3">
+              {stats.zones_performance?.map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <p className="text-sm font-semibold text-slate-700">{item.zone_name}</p>
+                  <p className="text-brand-500 font-black text-sm">{item.average_response_time_seconds ? `${Math.round(item.average_response_time_seconds)}s` : '0s delay'}</p>
+                </div>
+              ))}
+            </div>
           </div>
-          <p className="text-sm text-slate-600 mt-4">Overall Average: <span className="font-semibold text-slate-800">1.45 minutes</span></p>
+          <p className="text-xs text-slate-400 font-mono uppercase mt-6 pt-4 border-t border-slate-100">Gross Nursery Mean Average Target Boundary: <span className="font-bold text-slate-700">{stats.summary?.nursery_average_response_time_seconds || 0}s</span></p>
         </div>
       </div>
     </div>
@@ -509,22 +396,18 @@ const PerformanceTab = () => {
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('profile');
-  // Get user role from sessionStorage
-  let role = 'manager';
-  try {
-    const user = JSON.parse(sessionStorage.getItem('user'));
-    if (user && user.role) role = user.role;
-  } catch {}
+  
+  // Extract account configurations securely from unified local memory
+  const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
+  const role = storedUser ? JSON.parse(storedUser)?.role?.toLowerCase() : 'manager';
+
   const isManager = role === 'manager';
   const isParent = role === 'parent';
-  const isTeacher = role === 'teacher';
 
-  // Tab visibility logic
   const showCameras = isManager || isParent;
   const showUsers = isManager;
   const showPerformance = isManager;
 
-  // Tabs config
   const tabs = [
     { key: 'profile', label: 'Profile', show: true },
     { key: 'notifications', label: 'Notifications', show: true },
@@ -533,33 +416,32 @@ export default function Settings() {
     { key: 'performance', label: 'Analytics', show: showPerformance },
   ];
 
-  // If current tab is not allowed, switch to first allowed
-  React.useEffect(() => {
+  useEffect(() => {
     if (!tabs.find(t => t.key === activeTab && t.show)) {
-      const first = tabs.find(t => t.show);
-      if (first) setActiveTab(first.key);
+      const firstAllowed = tabs.find(t => t.show);
+      if (firstAllowed) setActiveTab(firstAllowed.key);
     }
   }, [role]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-2">
       <header className="mb-6">
         <h2 className="text-3xl font-bold text-slate-800 flex items-center gap-2">
           <User size={32} className="text-brand-500" />
-          Settings
+          Settings Configuration Center
         </h2>
-        <p className="text-slate-500 mt-2">Manage your account and preferences</p>
+        <p className="text-slate-500 mt-1 text-sm">Manage system telemetry preferences, notification endpoints, and user hierarchies</p>
       </header>
 
-      {/* Tabs Navigation */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex flex-wrap gap-2">
+      {/* Dynamic Tab Switchboards Navigation */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-3 flex flex-wrap gap-2">
         {tabs.filter(t => t.show).map(tab => (
           <TabButton key={tab.key} tab={tab.key} activeTab={activeTab} onClick={setActiveTab} label={tab.label} />
         ))}
       </div>
 
-      {/* Tab Content */}
-      <div>
+      {/* Tab Panel Viewports */}
+      <div className="mt-4">
         {activeTab === 'profile' && <EditProfile />}
         {activeTab === 'notifications' && <NotificationsTab />}
         {activeTab === 'cameras' && showCameras && <ManageCameras role={role} />}

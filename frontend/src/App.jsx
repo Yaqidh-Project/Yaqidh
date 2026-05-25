@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
-import LiveMonitoring from './pages/LiveMonitoring'; // Ensure this points to your new functional file
+import LiveMonitoring from './pages/LiveMonitoring'; 
 import Incidents from './pages/Incidents';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
@@ -11,7 +11,7 @@ import Register from './pages/Register';
 import About from './pages/About';
 import ForgotPassword from './pages/ForgotPassword';
 
-// Component to show error message on login if redirected
+// Component to show access denied error message on login if redirected from a guard block
 const LoginWithError = () => {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
@@ -20,7 +20,7 @@ const LoginWithError = () => {
   return (
     <>
       {error === "invalid" && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-600 text-white px-6 py-2 rounded-full shadow-lg text-sm font-bold">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-600 text-white px-6 py-2 rounded-full shadow-lg text-sm font-bold animate-bounce">
           Access Denied: You do not have permission for that section.
         </div>
       )}
@@ -29,29 +29,36 @@ const LoginWithError = () => {
   );
 };
 
-// RequireRole component - Controls access to specific pages
+// RequireRole component - Secure route guard checking for dynamic authorized system privileges
 const RequireRole = ({ allowed = [], children }) => {
   let role = null;
   try {
-    role = JSON.parse(sessionStorage.getItem('user'))?.role;
+    // Flexibly falls back to check both storage scopes to eliminate authorization drops
+    const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
+    role = storedUser ? JSON.parse(storedUser)?.role : null;
   } catch (e) {
+    console.error("Failed to extract account authorization properties:", e);
     role = null;
   }
 
   if (allowed.length === 0) return children;
-  if (role && allowed.includes(role)) return children;
+  if (role && allowed.includes(role.toLowerCase())) return children;
 
   return <Navigate to="/login?error=invalid" replace />;
 };
 
-// Default redirect logic based on Aliyah's project requirements
+// Default redirect engine determining navigation landing targets upon authentication states
 const DefaultRedirect = () => {
-  const userStr = sessionStorage.getItem('user');
+  const userStr = localStorage.getItem('user') || sessionStorage.getItem('user');
   if (!userStr) return <Navigate to="/login" replace />;
 
-  const role = JSON.parse(userStr)?.role;
-  if (role === "manager" || role === "parent") return <Navigate to="/dashboard" replace />;
-  if (role === "teacher") return <Navigate to="/incidents" replace />;
+  try {
+    const role = JSON.parse(userStr)?.role;
+    if (role === "manager" || role === "parent") return <Navigate to="/dashboard" replace />;
+    if (role === "teacher") return <Navigate to="/incidents" replace />;
+  } catch (e) {
+    console.error("Malformed storage user payload context execution:", e);
+  }
 
   return <Navigate to="/login" replace />;
 };
@@ -60,22 +67,22 @@ function App() {
   return (
     <Router>
       <Routes>
-        {/* Auth Routes */}
+        {/* Public Authentication Pipelines */}
         <Route path="/login" element={<LoginWithError />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
 
-        {/* Root Redirect after login/register */}
+        {/* Global Hub Router Switchboard */}
         <Route path="/" element={<DefaultRedirect />} />
 
-        {/* Protected System Routes wrapped in Layout */}
+        {/* Secured System Topologies Covered by Master Layout Wrappers */}
         <Route
           path="/*"
           element={
             <RequireRole allowed={["teacher", "manager", "parent"]}>
               <Layout>
                 <Routes>
-                  {/* Dashboard → Manager & Parent */}
+                  {/* Dashboard Route -> Accessible by Manager and Parent scopes */}
                   <Route 
                     path="/dashboard" 
                     element={
@@ -85,7 +92,7 @@ function App() {
                     } 
                   />
 
-                  {/* Live AI Monitoring → Manager & Parent */}
+                  {/* Real-time Computer Vision Screen Frame Matrix */}
                   <Route 
                     path="/live" 
                     element={
@@ -95,13 +102,17 @@ function App() {
                     } 
                   />
 
-                  {/* Incidents Tracking */}
+                  {/* System Historic Alerts Log Context */}
                   <Route 
                     path="/incidents" 
-                    element={<Incidents />} 
+                    element={
+                      <RequireRole allowed={["manager", "parent", "teacher"]}>
+                        <Incidents />
+                      </RequireRole>
+                    } 
                   />
 
-                  {/* Analytical Reports */}
+                  {/* Deep Analytics Report Charts View */}
                   <Route 
                     path="/reports" 
                     element={
@@ -111,13 +122,13 @@ function App() {
                     } 
                   />
 
-                  {/* System Settings */}
+                  {/* Functional Account & Settings Configuration Node */}
                   <Route path="/settings" element={<Settings />} />
 
-                  {/* About the System */}
+                  {/* About the Yaqidh Framework Overview Documentation */}
                   <Route path="/about" element={<About />} />
 
-                  {/* Fallback for within layout */}
+                  {/* Structural Path Fallback Interface Re-routing */}
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </Layout>
