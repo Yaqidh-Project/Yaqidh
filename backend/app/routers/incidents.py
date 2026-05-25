@@ -2,7 +2,7 @@ import uuid
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from app.database import get_db
 from app.models.incident import Incident
 from app.models.camera import Camera
@@ -154,7 +154,7 @@ async def get_incident(
 async def update_incident(
     incident_id: uuid.UUID,
     payload: IncidentUpdate,
-    current_user: User = Depends(require_roles("Manager", "Parent")),  # Restricted to Manager & Parent only
+    current_user: User = Depends(require_roles("Manager", "Teacher")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -165,16 +165,31 @@ async def update_incident(
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
 
-    await _assert_incident_access(current_user, incident, db)
+    if current_user.role_name == "Teacher":
+        await _assert_incident_access(current_user, incident, db)
 
-    for field, value in payload.model_dump(exclude_none=True).items():
+    incident_data = payload.model_dump(exclude_none=True)
+    
+    if "status" in incident_data:
+        new_status = str(incident_data["status"]).lower()
+        current_status = str(incident.status).lower()
+        
+        if new_status == "resolved" and current_status != "resolved":
+            incident.resolved_at = func.now()
+            incident.resolved_by_id = current_user.user_id
+        elif new_status == "open":
+            incident.resolved_at = None
+            incident.resolved_by_id = None
+
+    for field, value in incident_data.items():
         if field == "incident_clip":
             value = _normalize_incident_clip(value)
         setattr(incident, field, value)
         
     await db.flush()
-    await db.commit()  # Explicit commit added to lock inside persistence matrix
+    await db.commit()
     await db.refresh(incident)
+    
     return incident
 
 
