@@ -31,6 +31,8 @@ class IncidentOut(BaseModel):
     camera_id: Optional[uuid.UUID] = None
     confidence: Optional[float] = None
     detections: Optional[Union[dict[str, Any], list[dict[str, Any]]]] = None
+    resolved_at: Optional[datetime] = None
+    resolved_by_id: Optional[uuid.UUID] = None
 
     model_config = {"from_attributes": True}
     
