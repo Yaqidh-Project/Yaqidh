@@ -11,7 +11,8 @@ import {
 } from 'lucide-react';
 import axiosInstance from '../api/axiosInstance';
 
-const CameraFeed = ({ id, name }) => {
+// Enhanced CameraFeed with dynamic index-based hardware selection configuration
+const CameraFeed = ({ id, name, index }) => {
   const [time, setTime] = useState(new Date().toLocaleTimeString());
   const [isStreaming, setIsStreaming] = useState(false);
   const [liveAlert, setLiveAlert] = useState(null);
@@ -30,16 +31,17 @@ const CameraFeed = ({ id, name }) => {
   }, []);
 
   const toggleWebcam = async () => {
-    // SECURITY CHECK: Block activation if the camera hardware mapping is empty or undefined
     if (!id || id.includes('placeholder')) {
       alert("No active camera hardware pipeline detected for this zone. Please add a camera in settings first.");
       return;
     }
 
     if (isStreaming) {
-      const tracks = videoRef.current.srcObject.getTracks();
-      tracks.forEach(track => track.stop());
-      videoRef.current.srcObject = null;
+      if (videoRef.current && videoRef.current.srcObject) {
+        const tracks = videoRef.current.srcObject.getTracks();
+        tracks.forEach(track => track.stop());
+        videoRef.current.srcObject = null;
+      }
       setIsStreaming(false);
 
       if (wsRef.current) {
@@ -47,23 +49,50 @@ const CameraFeed = ({ id, name }) => {
       }
     } else {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { width: 1280, height: 720 }, 
-          audio: false 
-        });
+        // Enumerate all video capture hardware connected to the client platform
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        
+        let constraints = { video: { width: 1280, height: 720 }, audio: false };
+
+        if (videoDevices.length > 0) {
+          if (index === 0) {
+            // Camera 1 Target: Explicitly look for a built-in or native integrated front camera
+            const builtInCam = videoDevices.find(d => d.label.toLowerCase().includes('integrated') || d.label.toLowerCase().includes('built-in'));
+            if (builtInCam) {
+              constraints.video.deviceId = { exact: builtInCam.deviceId };
+            } else {
+              constraints.video.deviceId = { exact: videoDevices[0].deviceId };
+            }
+          } else if (index === 1) {
+            // Camera 2 Target: Explicitly search for external dynamic virtualization drivers like Iruun, EpocCam, or DroidCam
+            const externalCam = videoDevices.find(d => d.label.toLowerCase().includes('irun') || d.label.toLowerCase().includes('virtual') || d.label.toLowerCase().includes('wireless'));
+            if (externalCam) {
+              constraints.video.deviceId = { exact: externalCam.deviceId };
+            } else if (videoDevices[1]) {
+              // Fallback to the second hardware index slot if explicit names don't match strings
+              constraints.video.deviceId = { exact: videoDevices[1].deviceId };
+            }
+          } else {
+            // Camera 3+ Targets: Cycle through remaining structural hardware indices dynamically
+            const targetIndex = index < videoDevices.length ? index : videoDevices.length - 1;
+            constraints.video.deviceId = { exact: videoDevices[targetIndex].deviceId };
+          }
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           setIsStreaming(true);
         }
 
-        // Establish connection using the validated dynamic camera ID
+        // Establish real-time websocket connection using secure environment tokens
         const token = localStorage.getItem('token');
         const wsUrl = `${import.meta.env.VITE_WS_BASE_URL}/ws/notifications?token=${token}`;
         wsRef.current = new WebSocket(wsUrl);
 
         wsRef.current.onmessage = (event) => {
           const data = JSON.parse(event.data);
-          // Trigger alert banner only if the incident matches this exact camera database ID
           if (data.event === "incident_created" && data.camera_id === id) {
             setLiveAlert(`⚠️ DETECTED: ${data.incident_type} inside ${name}!`);
             setTimeout(() => setLiveAlert(null), 5000); 
@@ -72,7 +101,7 @@ const CameraFeed = ({ id, name }) => {
 
       } catch (err) {
         console.error(`Error activating video feed for ${name}:`, err);
-        alert("Could not initialize camera pipeline.");
+        alert(`Could not initialize camera pipeline for ${name}. Ensure hardware access is granted.`);
       }
     }
   };
@@ -170,7 +199,7 @@ export default function LiveMonitoring() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Dynamically fetch the authorized camera hardware assigned to this specific account zone
+    // Dynamically fetch the complete structured array list of authorized cameras assigned to this user session context
     axiosInstance.get('/cameras') 
       .then(response => {
         const formattedCameras = response.data.map(cam => ({
@@ -205,7 +234,6 @@ export default function LiveMonitoring() {
           <h2 className="text-4xl font-black text-slate-900 tracking-tight">Live Monitoring Matrix</h2>
         </div>
         
-        {/* Dynamic Display Layout View Matrix Switchers */}
         {cameras.length > 1 && (
           <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm flex-wrap">
             <button
@@ -238,13 +266,14 @@ export default function LiveMonitoring() {
             ⚠️ No active cameras registered for this account zone framework.
           </div>
         ) : (
+          /* Dynamic Grid Alignment: Maps to 2 columns for multi-camera setups, adapts cleanly if more are returned */
           <div className={`grid gap-8 transition-all duration-500 ${
-            viewMode === 'all' && cameras.length > 1 ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1 max-w-4xl mx-auto'
+            viewMode === 'all' && cameras.length > 1 ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1 max-w-4xl mx-auto'
           }`}>
             {cameras
               .filter(cam => viewMode === 'all' || viewMode === cam.id)
-              .map(cam => (
-                <CameraFeed key={cam.id} id={cam.id} name={cam.name} />
+              .map((cam, idx) => (
+                <CameraFeed key={cam.id} id={cam.id} name={cam.name} index={idx} />
               ))
             }
           </div>
