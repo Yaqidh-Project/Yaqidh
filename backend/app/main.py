@@ -11,6 +11,7 @@ from app.routers import auth, users, zones, cameras, incidents, reports, inferen
 from app.routers import manager as manager_router
 from app.services.notifications import manager as ws_manager
 
+# Configure logging format for application visibility
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -22,16 +23,20 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # --- Startup Actions ---
     logger.info("Starting Yaqidh API server...")
-
+    
     logger.info("Loading ONNX models...")
     model_inference.load_models()
 
+    # Spin up background loop to manage storage and purge old incident clips
     retention_task = asyncio.create_task(retention_loop())
     logger.info(f"Clip retention task started (retention: {settings.CLIP_RETENTION_DAYS} days)")
 
     yield
 
+    # --- Shutdown Actions ---
+    logger.info("Shutting down Yaqidh API server...")
     retention_task.cancel()
     try:
         await retention_task
@@ -48,14 +53,22 @@ app = FastAPI(
     root_path="/yaqidh-api",
 )
 
+# Explicitly configure CORS to accept connections from your Vercel frontend and local environments
+origins = [
+    "https://yaqidh.vercel.app",  # Production Vercel App
+    "http://localhost:5173",      # Vite local development server
+    "http://127.0.0.1:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Register application routers
 app.include_router(auth.router)
 app.include_router(manager_router.router)
 app.include_router(users.router)
@@ -70,6 +83,9 @@ app.include_router(websocket.router)
 
 @app.get("/health", tags=["health"])
 async def health():
+    """
+    System status check endpoint used to monitor model states and live sockets.
+    """
     return {
         "status": "ok",
         "service": "yaqidh-api",

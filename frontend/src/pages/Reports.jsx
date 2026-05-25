@@ -1,35 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Download, Calendar, TrendingUp, Filter, BarChart2 } from 'lucide-react';
+import { FileText, Download, Calendar, TrendingUp, BarChart2, FileSpreadsheet, FileJson, RefreshCw } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import axiosInstance from '../api/axiosInstance';
-
-const ReportCard = ({ title, description, date, type }) => (
-  <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow cursor-pointer group">
-    <div className="flex items-start justify-between mb-4">
-      <div className="flex items-start gap-3">
-        <div className="p-3 rounded-xl bg-brand-50">
-          <FileText size={20} className="text-brand-500" />
-        </div>
-        <div>
-          <h3 className="font-bold text-slate-800">{title}</h3>
-          <p className="text-sm text-slate-500 mt-1">{description}</p>
-        </div>
-      </div>
-      <Download size={20} className="text-slate-400 group-hover:text-brand-500 transition-colors" />
-    </div>
-    <div className="flex items-center justify-between text-sm">
-      <span className="text-slate-500 flex items-center gap-1 font-medium">
-        <Calendar size={14} /> {date}
-      </span>
-      <span className="px-3 py-1 bg-brand-50 text-brand-500 rounded-full text-xs font-bold uppercase tracking-tight">{type}</span>
-    </div>
-  </div>
-);
 
 export default function Reports() {
   const [totalIncidents, setTotalIncidents] = useState(0);
   const [categories, setCategories] = useState({ falls: 0, violence: 0 });
   const [chartData, setChartData] = useState([]);
+  const [downloadFormat, setDownloadFormat] = useState('pdf'); // State tracking format preference: 'pdf' or 'json'
+  const [exportLoading, setExportLoading] = useState(false);
 
   useEffect(() => {
     // Retrieve real incident stats from database to build analytics graphs dynamically
@@ -45,34 +24,111 @@ export default function Reports() {
 
         // Populate weekly distributions dynamically
         const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu'];
-        const distribution = days.map(day => {
-          return {
-            name: day,
-            incidents: Math.floor(Math.random() * data.length) || 1, // Normalized calculation layer
-            falsePositives: 0
-          };
-        });
+        const distribution = days.map(day => ({
+          name: day,
+          incidents: data.filter(i => {
+            const date = new Date(i.timestamp);
+            const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            return dayLabels[date.getDay()] === day;
+          }).length || 0,
+          falsePositives: 0
+        }));
         setChartData(distribution);
       })
       .catch(err => console.error("Error generating reports analytics:", err));
   }, []);
 
-  // Safe percentage calculations to handle initial zero values
-  const fallPercentage = totalIncidents > 0 ? Math.round((categories.falls / totalIncidents) * 100) : 50;
-  const violencePercentage = totalIncidents > 0 ? Math.round((categories.violence / totalIncidents) * 100) : 50;
+  const handleGenerateAndDownloadReport = async () => {
+    setExportLoading(true);
+    try {
+      // Step 1: Request the backend to compile data metrics and persist a new Report row inside pgAdmin
+      const filterPayload = {
+        start_date: null,
+        end_date: null,
+        danger_category: null,
+        status: null,
+        camera_id: null
+      };
+      
+      const createResponse = await axiosInstance.post('/reports', filterPayload);
+      const newReportId = createResponse.data.report_id;
+
+      if (!newReportId) throw new Error("Missing structural report identifier boundary.");
+
+      // Step 2: Download the generated report block based on the user's selected file extension format
+      if (downloadFormat === 'pdf') {
+        const pdfResponse = await axiosInstance.get(`/reports/${newReportId}/export-pdf`, {
+          responseType: 'blob' // Essential for processing binary stream documents cleanly
+        });
+        
+        const blob = new Blob([pdfResponse.data], { type: 'application/pdf' });
+        const link = document.createElement('a');
+        link.href = window.URL.createObjectURL(blob);
+        link.download = `Yaqidh_Safety_Report_${newReportId}.pdf`;
+        link.click();
+      } else {
+        const jsonResponse = await axiosInstance.get(`/reports/${newReportId}/export-json`);
+        
+        const blob = new Blob([JSON.stringify(jsonResponse.data, null, 2)], { type: 'application/json' });
+        const link = document.createElement('a');
+        link.href = window.URL.createObjectURL(blob);
+        link.download = `Yaqidh_Data_Report_${newReportId}.json`;
+        link.click();
+      }
+    } catch (err) {
+      console.error("Failed to compile or stream security documentation records:", err);
+      alert("Could not process report compile actions. Verify your database records state.");
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const fallPercentage = totalIncidents > 0 ? Math.round((categories.falls / totalIncidents) * 100) : 0;
+  const violencePercentage = totalIncidents > 0 ? Math.round((categories.violence / totalIncidents) * 100) : 0;
 
   return (
     <div className="p-6 space-y-8 bg-slate-50/30 min-h-screen font-sans">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 max-w-6xl mx-auto">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 max-w-6xl mx-auto border-b border-slate-200/60 pb-6">
         <div>
           <h2 className="text-3xl font-black text-brand-500 flex items-center gap-3">
             <BarChart2 size={36} /> Reports & Analytics
           </h2>
-          <p className="text-slate-500 font-medium mt-1 tracking-tight">AI-powered safety monitoring data</p>
+          <p className="text-slate-500 font-medium mt-1 tracking-tight">AI-powered safety monitoring data logs</p>
         </div>
-        <button className="flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-brand-500/30 transition-all active:scale-95">
-          <Download size={20} /> Export Dataset
-        </button>
+        
+        {/* Dynamic Executive Document Compiler Controls Block */}
+        <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm flex-wrap">
+          <div className="flex bg-slate-100 p-1 rounded-xl">
+            <button
+              onClick={() => setDownloadFormat('pdf')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                downloadFormat === 'pdf' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <FileSpreadsheet size={14} /> PDF Document
+            </button>
+            <button
+              onClick={() => setDownloadFormat('json')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                downloadFormat === 'json' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <FileJson size={14} /> JSON Data
+            </button>
+          </div>
+
+          <button 
+            onClick={handleGenerateAndDownloadReport}
+            disabled={exportLoading}
+            className="flex items-center gap-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-md shadow-brand-500/20 transition-all active:scale-95"
+          >
+            {exportLoading ? (
+              <><RefreshCw size={14} className="animate-spin" /> Compiling...</>
+            ) : (
+              <><Download size={14} /> Generate & Download</>
+            )}
+          </button>
+        </div>
       </header>
 
       <div className="max-w-6xl mx-auto">

@@ -10,6 +10,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import About from './pages/About';
 import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword'; // Imported the password modification interface framework
 
 // Component to show access denied error message on login if redirected from a guard block
 const LoginWithError = () => {
@@ -71,6 +72,9 @@ function App() {
         <Route path="/login" element={<LoginWithError />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        
+        {/* Unsecured Public Password Reset Pipeline Target Component */}
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* Global Hub Router Switchboard */}
         <Route path="/" element={<DefaultRedirect />} />
