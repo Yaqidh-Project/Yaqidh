@@ -25,17 +25,34 @@ class Incident(Base):
     danger_category: Mapped[str] = mapped_column(String(100), nullable=False)
     incident_type: Mapped[str] = mapped_column(String(100), nullable=False)
     incident_clip: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    # Track incident lifecycle states
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="open")
-    camera_id: Mapped[uuid.UUID] = mapped_column(
+    
+    # Operational performance metric fields
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    resolved_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True
+    )
+
+    camera_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("cameras.camera_id", ondelete="SET NULL"), nullable=True
     )
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     detections: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
+    # Relationships
     camera: Mapped["Camera"] = relationship("Camera", back_populates="incidents")
+    
     notified_users: Mapped[list["User"]] = relationship(
         "User", secondary="notifies", back_populates="incident_notifications"
     )
+    
     reports: Mapped[list["Report"]] = relationship(
         "Report", secondary="report_incidents", back_populates="incidents"
     )
+    
+    # Relationship to identify who handled the incident
+    resolved_by: Mapped["User | None"] = relationship("User")
