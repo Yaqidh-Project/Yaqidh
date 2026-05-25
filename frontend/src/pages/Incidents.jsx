@@ -6,12 +6,11 @@ import {
   AlertCircle,
   Eye,
   Download,
-  CheckCircle2
+  CheckCircle2,
+  RefreshCw
 } from 'lucide-react';
+import axiosInstance from '../api/axiosInstance';
 
-/**
- * Individual Incident Card Component
- */
 const IncidentCard = ({ incident, isTeacher, onViewDetails, onViewClip, onDownloadClip, onResolveIncident }) => (
   <div 
     onClick={() => onViewDetails(incident)}
@@ -20,17 +19,13 @@ const IncidentCard = ({ incident, isTeacher, onViewDetails, onViewClip, onDownlo
     <div>
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-start gap-3">
-          {/* Icon box color logic based on severity */}
+          {/* Card severity box wrapper matrix styling */}
           <div className={`p-3 rounded-xl ${
             incident.severity === 'critical' ? 'bg-red-100 text-red-600' : 
             incident.severity === 'warning' ? 'bg-orange-100 text-orange-600' : 
             'bg-blue-100 text-blue-600'
           }`}>
-            {incident.severity === 'critical' ? (
-              <AlertTriangle size={20} />
-            ) : (
-              <AlertCircle size={20} />
-            )}
+            {incident.severity === 'critical' ? <AlertTriangle size={20} /> : <AlertCircle size={20} />}
           </div>
           <div>
             <h3 className="font-semibold text-slate-800">{incident.type}</h3>
@@ -40,7 +35,6 @@ const IncidentCard = ({ incident, isTeacher, onViewDetails, onViewClip, onDownlo
           </div>
         </div>
         
-        {/* Right side: Severity badge and relative time */}
         <div className="flex flex-col items-end gap-1">
           <span className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${
             incident.severity === 'critical' ? 'bg-red-100 text-red-600' : 
@@ -57,49 +51,38 @@ const IncidentCard = ({ incident, isTeacher, onViewDetails, onViewClip, onDownlo
         </div>
       </div>
       
-      {/* Bottom row: Absolute Timestamp & Action Icons horizontally aligned */}
       <div className="flex items-center justify-between text-sm text-slate-600 mt-2">
         <div className="flex items-center gap-2">
           <Clock size={14} />
           <span>{incident.time}</span>
         </div>
 
-        {/* Media Actions: Completely hidden if the user is a Teacher */}
+        {/* Action controls logic blocks hidden from basic Teacher roles */}
         {!isTeacher && (
           <div className="flex items-center gap-1.5">
             <button
               onClick={(e) => {
-                e.stopPropagation(); // Prevents card selection trigger
+                e.stopPropagation();
                 onViewClip(incident);
               }}
-              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-colors group relative"
-              title="View Clip"
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-colors"
             >
               <Eye size={18} />
-              <span className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
-                View Clip
-              </span>
             </button>
-            
             <button
               onClick={(e) => {
-                e.stopPropagation(); // Prevents card selection trigger
+                e.stopPropagation();
                 onDownloadClip(incident);
               }}
-              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-colors group relative"
-              title="Download Clip"
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-colors"
             >
               <Download size={18} />
-              <span className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
-                Download Clip
-              </span>
             </button>
           </div>
         )}
       </div>
     </div>
     
-    {/* Status Row & Teacher Functional Close Toggle Button */}
     <div className="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between">
       <div className="flex items-center gap-2">
         <div className={`w-3 h-3 rounded-full ${incident.status === 'resolved' ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
@@ -112,7 +95,7 @@ const IncidentCard = ({ incident, isTeacher, onViewDetails, onViewClip, onDownlo
       {isTeacher && incident.status !== 'resolved' && (
         <button
           onClick={(e) => {
-            e.stopPropagation(); // Stop background card triggers
+            e.stopPropagation();
             onResolveIncident(incident.id);
           }}
           className="flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl transition-all duration-200"
@@ -129,70 +112,60 @@ export default function Incidents() {
   const [incidents, setIncidents] = useState([]);
   const [selectedIncident, setSelectedIncident] = useState(null);
   const [currentUserRole, setCurrentUserRole] = useState('manager');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let role = 'manager';
     try {
-      const user = JSON.parse(sessionStorage.getItem('user'));
+      const user = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user'));
       if (user && user.role) role = user.role.toLowerCase();
     } catch (e) {
-      console.error("Could not parse user role from sessionStorage", e);
+      console.error("Failed to parse user role storage nodes:", e);
     }
     
     setCurrentUserRole(role);
 
-    if (role === 'manager' || role === 'teacher') {
-      setIncidents([
-        { id: 1, type: 'Fall Detected', severity: 'critical', location: 'Playroom A', time: '2026-5-13 19:00', relativeTime: 'Just now', status: 'active' },
-        { id: 2, type: 'Violence Suspicion', severity: 'warning', location: 'Classroom B', time: '2026-5-13 18:40', relativeTime: '20 min ago', status: 'active' },
-        { id: 3, type: 'Fall Detected', severity: 'critical', location: 'Outdoor Playground', time: '2026-5-13 18:40', relativeTime: '20 min ago', status: 'resolved' },
-        { id: 4, type: 'Violence Detected', severity: 'critical', location: 'Classroom C', time: '2026-5-13 18:40', relativeTime: '20 min ago', status: 'active' },
-      ]);
-    } else {
-      setIncidents([
-        { id: 1, type: 'Fall Detected', severity: 'critical', location: "Baby's Bedroom", time: '2026-5-13 19:00', relativeTime: 'Just now', status: 'active' },
-        { id: 2, type: 'Violence Suspicion', severity: 'warning', location: "Living Room", time: '2026-5-13 18:40', relativeTime: '20 min ago', status: 'active' },
-        { id: 3, type: 'Fall Detected', severity: 'critical', location: 'Garden / Backyard', time: '2026-5-13 18:40', relativeTime: '20 min ago', status: 'resolved' },
-      ]);
-    }
+    // Dynamic extraction fetching live alerts from active backend API router
+    axiosInstance.get('/incidents')
+      .then(response => {
+        const mapped = response.data.map(item => ({
+          id: item.incident_id,
+          type: item.incident_type,
+          severity: item.danger_category === 'critical' ? 'critical' : 'warning',
+          location: 'Designated Camera Scope Zone',
+          time: new Date(item.timestamp).toLocaleString(),
+          relativeTime: item.status === 'resolved' ? 'Archived Log' : 'Active Alert',
+          status: item.status?.toLowerCase() || 'active'
+        }));
+        setIncidents(mapped);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error("Could not fetch database incident arrays:", err);
+        setLoading(false);
+      });
   }, []);
 
-  const handleViewClip = (incident) => {
-    console.log("Viewing clip for incident:", incident.id);
-  };
-
-  const handleDownloadClip = (incident) => {
-    console.log("Downloading clip for incident:", incident.id);
-  };
-
-  // Triggers the state transformation update when resolved
   const handleResolveIncident = (incidentId) => {
-    // 1. Update frontend local interface visibility state
-    setIncidents(prevIncidents => 
-      prevIncidents.map(inc => 
-        inc.id === incidentId ? { ...inc, status: 'resolved' } : inc
-      )
-    );
-
-    // 2. Primed API endpoint connection wrapper
-    /*
-    fetch(`/api/incidents/${incidentId}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${sessionStorage.getItem('token')}`
-      },
-      body: JSON.stringify({ status: 'resolved' })
-    })
-    .then(res => res.json())
-    .catch(err => console.error("Database update error:", err));
-    */
-    console.log(`Incident ${incidentId} marked as resolved by Teacher.`);
+    // Triggers real-time status patch mapping to database records
+    axiosInstance.patch(`/incidents/${incidentId}`, { status: 'resolved' })
+      .then(() => {
+        setIncidents(prev => prev.map(inc => inc.id === incidentId ? { ...inc, status: 'resolved' } : inc));
+      })
+      .catch(err => console.error("Database update error context logic:", err));
   };
 
   const activeSevere = incidents.filter(i => i.status === 'active' && i.severity === 'critical').length;
   const activeWarnings = incidents.filter(i => i.status === 'active' && i.severity === 'warning').length;
   const isTeacher = currentUserRole === 'teacher';
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center font-mono text-xs text-slate-400">
+        <RefreshCw className="animate-spin mr-2" size={16} /> SYNCING INCIDENTS LOG FROM DATABASE...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-4">
@@ -204,7 +177,7 @@ export default function Incidents() {
         <p className="text-slate-500 mt-2">Track and manage all security incidents</p>
       </header>
 
-      {/* Stats Section */}
+      {/* Numerical Metrics Summary Dashboard Panel */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
           <p className="text-slate-500 text-sm mb-2">Total Incidents</p>
@@ -220,20 +193,26 @@ export default function Incidents() {
         </div>
       </div>
 
-      {/* Incidents Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {incidents.map(incident => (
-          <IncidentCard 
-            key={incident.id} 
-            incident={incident} 
-            isTeacher={isTeacher}
-            onViewDetails={setSelectedIncident}
-            onViewClip={handleViewClip}
-            onDownloadClip={handleDownloadClip}
-            onResolveIncident={handleResolveIncident}
-          />
-        ))}
-      </div>
+      {/* Incidents Grid Display Panel */}
+      {incidents.length === 0 ? (
+        <div className="text-center py-20 text-slate-400 text-sm font-mono uppercase bg-white rounded-3xl border border-dashed border-slate-100 p-8 shadow-sm">
+          ✅ No safety incidents logged inside database pipeline repository.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {incidents.map(incident => (
+            <IncidentCard 
+              key={incident.id} 
+              incident={incident} 
+              isTeacher={isTeacher}
+              onViewDetails={setSelectedIncident}
+              onViewClip={(inc) => console.log("Streaming Clip reference ID:", inc.id)}
+              onDownloadClip={(inc) => console.log("Downloading local file reference:", inc.id)}
+              onResolveIncident={handleResolveIncident}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

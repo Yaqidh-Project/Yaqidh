@@ -1,20 +1,22 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { User, Mail, Phone, Lock, ArrowRight, ShieldCheck } from 'lucide-react';
+import axiosInstance from '../api/axiosInstance';
 
 export default function Register() {
-  const [step, setStep] = useState(1); // Step 1: Account Details, Step 2: Verification
+  const [step, setStep] = useState(1); // Step 1: Details, Step 2: SMS OTP Verification
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
     phone: '',
     password: '',
     confirmPassword: '',
-    role: 'parent', // Default role
+    role: 'Parent', // Must match the backend Enum casing (Parent or Manager)
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
+  const navigate = useNavigate();
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -37,61 +39,87 @@ export default function Register() {
     return true;
   };
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
     setError('');
 
     if (!validateForm()) return;
-
     setLoading(true);
-    // Simulate API call for phone verification
-    setTimeout(() => {
+
+    try {
+      // 1. Create account on the backend using the proper Pydantic payload mapping
+      await axiosInstance.post('/auth/register', {
+        full_name: formData.fullName,
+        email: formData.email,
+        password: formData.password,
+        phone_number: formData.phone,
+        role_name: formData.role, 
+        notification_prefs: { sms: true, email: true, app: true }
+      });
+
+      // 2. Perform temporary login to retrieve the JWT token for requesting the OTP code
+      const loginRes = await axiosInstance.post('/auth/login', {
+        email: formData.email,
+        password: formData.password
+      });
+      localStorage.setItem('token', loginRes.data.access_token);
+
+      // 3. Trigger the real multi-factor SMS OTP code request
+      await axiosInstance.post('/auth/phone/request-code');
+      
+      // Advance to the OTP confirmation section
       setStep(2);
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.detail || 'Registration failed. Please try again.');
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
-  const handleVerifyPhone = (e) => {
+  const handleVerifyPhone = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (!verificationCode) {
+      setError('Please enter the 6-digit verification code');
+      return;
+    }
     setLoading(true);
 
-    setTimeout(() => {
-      if (verificationCode) {
-        // Store user session upon successful registration
-        sessionStorage.setItem('user', JSON.stringify({ 
-          email: formData.email,
-          role: formData.role 
-        }));
-        window.location.href = '/';
-      } else {
-        setError('Please enter the 6-digit verification code');
-      }
+    try {
+      // Send code challenge to activate and verify the phone number scope constraints
+      await axiosInstance.post(`/auth/phone/verify-code?code=${verificationCode}`);
+      
+      // Store user metadata locally and redirect to root page
+      localStorage.setItem('user', JSON.stringify({ email: formData.email, role: formData.role.toLowerCase() }));
+      window.location.href = '/';
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.detail || 'Invalid or expired code.');
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
       <div className="w-full max-w-md space-y-8">
-        {/* Branding Section */}
         <div className="text-center">
           <img src="/Yaqidh-logo.png" alt="Yaqidh Logo" className="h-16 w-auto mx-auto mb-4 object-contain" />
           <h1 className="text-3xl font-black text-brand-500 tracking-tighter italic">CREATE ACCOUNT</h1>
           <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest mt-1">Step {step} of 2</p>
         </div>
 
-        {/* Form Card */}
         <div className="bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100">
           {error && (
-            <div className="mb-6 p-4 bg-red-600 rounded-2xl text-white text-xs font-black text-center animate-pulse">
+            <div className="mb-6 p-4 bg-red-600 rounded-2xl text-white text-xs font-black text-center">
               {error.toUpperCase()}
             </div>
           )}
 
           {step === 1 ? (
             <form onSubmit={handleRegister} className="space-y-5">
-              {/* Full Name */}
               <div className="relative">
                 <User className="absolute left-4 top-4 text-slate-300" size={18} />
                 <input
@@ -104,7 +132,6 @@ export default function Register() {
                 />
               </div>
 
-              {/* Email */}
               <div className="relative">
                 <Mail className="absolute left-4 top-4 text-slate-300" size={18} />
                 <input
@@ -117,7 +144,6 @@ export default function Register() {
                 />
               </div>
 
-              {/* Phone */}
               <div className="relative">
                 <Phone className="absolute left-4 top-4 text-slate-300" size={18} />
                 <input
@@ -125,12 +151,11 @@ export default function Register() {
                   name="phone"
                   value={formData.phone}
                   onChange={handleInputChange}
-                  placeholder="Phone Number"
+                  placeholder="Phone Number (e.g. +966500000000)"
                   className="w-full pl-12 pr-4 py-4 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none font-medium"
                 />
               </div>
 
-              {/* Password */}
               <div className="relative">
                 <Lock className="absolute left-4 top-4 text-slate-300" size={18} />
                 <input
@@ -143,7 +168,6 @@ export default function Register() {
                 />
               </div>
 
-              {/* Confirm Password */}
               <div className="relative">
                 <Lock className="absolute left-4 top-4 text-slate-300" size={18} />
                 <input
@@ -156,15 +180,14 @@ export default function Register() {
                 />
               </div>
 
-              {/* Role Selection: Restricted to Parent and Manager only */}
               <div className="pt-4 space-y-3">
                 <label className="block text-xs font-black text-slate-400 uppercase tracking-widest text-center">Account Type</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
-                    onClick={() => setFormData({...formData, role: 'parent'})}
+                    onClick={() => setFormData({...formData, role: 'Parent'})}
                     className={`py-4 rounded-2xl font-black text-xs transition-all border-2 ${
-                      formData.role === 'parent' 
+                      formData.role === 'Parent' 
                       ? 'border-brand-500 bg-brand-50 text-brand-500 shadow-inner' 
                       : 'border-slate-100 text-slate-400'
                     }`}
@@ -173,9 +196,9 @@ export default function Register() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setFormData({...formData, role: 'manager'})}
+                    onClick={() => setFormData({...formData, role: 'Manager'})}
                     className={`py-4 rounded-2xl font-black text-xs transition-all border-2 ${
-                      formData.role === 'manager' 
+                      formData.role === 'Manager' 
                       ? 'border-brand-500 bg-brand-50 text-brand-500 shadow-inner' 
                       : 'border-slate-100 text-slate-400'
                     }`}
@@ -183,7 +206,6 @@ export default function Register() {
                     MANAGER
                   </button>
                 </div>
-                {/* Information Badge about Teacher Accounts */}
                 <div className="flex items-center gap-2 justify-center bg-slate-50 p-3 rounded-xl border border-slate-100 mt-2">
                   <ShieldCheck size={14} className="text-brand-500" />
                   <p className="text-[9px] text-slate-400 font-bold uppercase leading-tight">
@@ -208,7 +230,7 @@ export default function Register() {
                 </div>
                 <h2 className="text-xl font-black text-slate-800">Verify Phone</h2>
                 <p className="text-xs text-slate-500 px-4">
-                  We've sent a 6-digit code to <span className="font-bold text-brand-500">{formData.phone}</span>
+                  Check your terminal logs! Enter the 6-digit verification code sent to <span className="font-bold text-brand-500">{formData.phone}</span>
                 </p>
               </div>
 
@@ -217,8 +239,8 @@ export default function Register() {
                 maxLength="6"
                 value={verificationCode}
                 onChange={(e) => setVerificationCode(e.target.value)}
-                placeholder="0 0 0 0 0 0"
-                className="w-full text-center text-2xl tracking-[1em] font-black py-4 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none"
+                placeholder="000000"
+                className="w-full text-center text-2xl tracking-[0.5em] font-black py-4 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none"
               />
 
               <button
@@ -239,7 +261,6 @@ export default function Register() {
             </form>
           )}
 
-          {/* Footer Navigation */}
           {step === 1 && (
             <div className="mt-8 text-center pt-6 border-t border-slate-50">
               <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">

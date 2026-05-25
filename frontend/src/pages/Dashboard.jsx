@@ -11,6 +11,7 @@ import {
   MapPin,
   TrendingUp
 } from 'lucide-react';
+import axiosInstance from '../api/axiosInstance';
 
 const StatCard = ({ title, value, icon: Icon, color }) => (
   <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between hover:shadow-md transition-shadow">
@@ -28,15 +29,13 @@ export default function Dashboard() {
   const [activeFilter, setActiveFilter] = useState('all');
   const [userRole, setUserRole] = useState('User');
   const [recentActivity, setRecentActivity] = useState([]);
-  
-  // New States for Manager Performance Tracking
   const [performanceData, setPerformanceData] = useState(null);
   const [isLoadingPerformance, setIsLoadingPerformance] = useState(false);
 
   useEffect(() => {
     let role = 'manager';
     try {
-      const user = JSON.parse(sessionStorage.getItem('user'));
+      const user = JSON.parse(localStorage.getItem('user'));
       if (user && user.role) role = user.role.toLowerCase();
     } catch (e) {}
 
@@ -47,18 +46,11 @@ export default function Dashboard() {
     };
     setUserRole(roleNames[role] || 'User');
 
-    // Fetch Performance Data strictly if user is a Manager
     if (role === 'manager') {
       setIsLoadingPerformance(true);
-      // Replace with your actual base URL or API utility wrapper
-      fetch('/api/manager/performance-dashboard', {
-        headers: {
-          'Authorization': `Bearer ${sessionStorage.getItem('token')}` // assuming token auth is used
-        }
-      })
-        .then(res => res.json())
-        .then(data => {
-          setPerformanceData(data);
+      axiosInstance.get('/manager/performance-dashboard')
+        .then(res => {
+          setPerformanceData(res.data);
           setIsLoadingPerformance(false);
         })
         .catch(err => {
@@ -67,21 +59,21 @@ export default function Dashboard() {
         });
     }
 
-    // Set Role-Based Mock Data for Recent Activity Stream
-    if (role === 'manager' || role === 'teacher') {
-      setRecentActivity([
-        { id: 1, type: 'critical', message: 'Fall Detected', time: 'Just now', details: 'Child fall detected in Playroom A' },
-        { id: 2, type: 'critical', message: 'Violence Detected', time: '12 mins ago', details: 'High physical proximity detected between two children' },
-        { id: 3, type: 'critical', message: 'Fall Detected', time: '2 hours ago', details: 'Child fall detected in Outdoor Playground' },
-        { id: 4, type: 'warning', message: 'Violence Suspicion', time: '5 mins ago', details: 'Unusual physical interaction detected in Classroom B - needs review' }
-      ]);
-    } else {
-      setRecentActivity([
-        { id: 1, type: 'critical', message: 'Fall Detected', time: 'Just now', details: 'Activity detected in Living Room' },
-        { id: 2, type: 'critical', message: 'Violence Suspicion', time: '12 mins ago', details: 'Unusual interaction in Baby\'s Bedroom' },
-        { id: 3, type: 'critical', message: 'Fall Detected', time: '2 hours ago', details: 'Motion alert in Garden / Backyard' }
-      ]);
-    }
+    axiosInstance.get('/incidents')
+      .then(res => {
+        const mappedActivities = res.data.map(inc => ({
+          id: inc.incident_id,
+          type: inc.danger_category === 'critical' ? 'critical' : 'warning',
+          message: inc.incident_type,
+          time: new Date(inc.timestamp).toLocaleTimeString(),
+          details: `Event recorded at camera scope.`
+        }));
+        setRecentActivity(mappedActivities);
+      })
+      .catch(err => {
+        console.error("Error loading incidents flow:", err);
+      });
+
   }, []);
 
   const filteredActivity = activeFilter === 'all' 
@@ -97,7 +89,6 @@ export default function Dashboard() {
     }
   };
 
-  // Helper to safely format average response times
   const formatResponseTime = (seconds) => {
     if (seconds === null || seconds === undefined) return "N/A";
     if (seconds < 60) return `${seconds}s`;
@@ -115,7 +106,6 @@ export default function Dashboard() {
         <p className="text-slate-500">System Status: <span className="text-emerald-600 font-medium">Monitoring Active</span></p>
       </header>
 
-      {/* Primary Stat Overview Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <StatCard title="Active Cameras" value={userRole === 'Parent/Caregiver' ? '3/3' : '4/4'} icon={ShieldCheck} color="bg-emerald-500" />
         <StatCard title="Today's Incidents" value={filteredActivity.length} icon={AlertOctagon} color="bg-rose-500" />
@@ -129,8 +119,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* MANAGER EXCLUSIVE VIEW: Routing & Performance Tracking Dashboard */}
-      {userRole === 'Nursery Manager' && (
+      {userRole === 'Nursery Manager' && performanceData && (
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 space-y-4">
           <div className="border-b border-slate-100 pb-4">
             <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
@@ -144,7 +133,7 @@ export default function Dashboard() {
             <div className="text-center py-6 text-slate-400 text-sm">Fetching structural metrics matrix...</div>
           ) : (
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              {performanceData?.zones_performance.map((zone) => (
+              {performanceData?.zones_performance?.map((zone) => (
                 <div key={zone.zone_id} className="p-4 rounded-xl bg-slate-50 border border-slate-100 flex flex-col justify-between space-y-3">
                   <div className="flex justify-between items-start">
                     <div>
@@ -153,7 +142,7 @@ export default function Dashboard() {
                         {zone.zone_name}
                       </h4>
                       <p className="text-xs text-slate-500 mt-1">
-                        Assigned Teacher(s): <span className="font-medium text-slate-700">{zone.assigned_teachers.join(', ') || 'Unassigned'}</span>
+                        Assigned Teacher(s): <span className="font-medium text-slate-700">{zone.assigned_teachers?.join(', ') || 'Unassigned'}</span>
                       </p>
                     </div>
                     <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${
@@ -180,7 +169,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Main Activity Flow Container */}
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
           <h3 className="font-bold text-slate-800">Recent System Activity</h3>
@@ -216,8 +204,6 @@ export default function Dashboard() {
                 <div className={`p-3 rounded-lg border ${getAlertStyle(activity.type)} mr-4 group-hover:scale-110 transition-transform`}>
                   {activity.type === 'critical' && <AlertOctagon size={20} />}
                   {activity.type === 'warning' && <AlertTriangle size={20} />}
-                  {activity.type === 'success' && <CheckCircle size={20} />}
-                  {activity.type === 'info' && <Info size={20} />}
                 </div>
 
                 <div className="flex-1">
@@ -238,12 +224,6 @@ export default function Dashboard() {
               <p>No activities found for this filter.</p>
             </div>
           )}
-        </div>
-        
-        <div className="mt-6 text-center pt-4 border-t border-slate-50">
-          <button className="text-sm text-indigo-600 font-medium hover:text-indigo-700 hover:underline">
-            View Full Incident History
-          </button>
         </div>
       </div>
     </div>
