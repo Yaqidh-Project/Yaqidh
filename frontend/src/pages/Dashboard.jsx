@@ -63,7 +63,7 @@ export default function Dashboard() {
       .then(res => {
         const mappedActivities = res.data.map(inc => ({
           id: inc.incident_id,
-          type: inc.danger_category === 'critical' ? 'critical' : 'warning',
+          type: inc.danger_category?.toLowerCase() === 'critical' ? 'critical' : 'warning',
           message: inc.incident_type,
           time: new Date(inc.timestamp).toLocaleTimeString(),
           details: `Event recorded at camera scope.`
