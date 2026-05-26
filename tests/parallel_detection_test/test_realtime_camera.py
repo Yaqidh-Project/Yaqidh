@@ -1,13 +1,16 @@
-from ultralytics import YOLO
+import os
+import sys
+import time
 import cv2
 import requests
 import numpy as np
-import time
 import logging
 import getpass
 import threading
+import subprocess
 from collections import deque
 from pathlib import Path
+from ultralytics import YOLO  
 
 # Configure system logging parameters
 logging.basicConfig(
@@ -28,9 +31,12 @@ BASE_DIR            = Path(__file__).resolve().parent.parent.parent / "backend" 
 FALL_MODEL_PATH     = str(BASE_DIR / "fall_detection.onnx")
 VIOLENCE_MODEL_PATH = str(BASE_DIR / "violence_detection.onnx")
 
-# Fixed explicit absolute path to prevent root-directory escaping issue
-CLIPS_DIR = Path("C:/Yaqidh-proj/backend/incident_clips")
+# ── FIXED: Points cleanly to the global asset directory ───────────────────
+# Navigates up from the current file location to reach 'Backend/incident_clips'
+BASE_BACKEND_DIR = Path(__file__).resolve().parents[2]
+CLIPS_DIR = BASE_BACKEND_DIR / "incident_clips"
 CLIPS_DIR.mkdir(parents=True, exist_ok=True)
+# ──────────────────────────────────────────────────────────────────────────
 
 # =========================================================================
 # CAMERA VIDEO STREAM SETTINGS
@@ -172,17 +178,49 @@ def load_models():
 # =========================================================================
 
 def save_clip(frames: list, event_type: str) -> tuple:
-    ts        = time.strftime("%Y%m%d_%H%M%S")
-    name      = f"{event_type}_{ts}.mp4"
-    path      = CLIPS_DIR / name
-    url       = f"/incident_clips/{name}"
-    fourcc    = cv2.VideoWriter_fourcc(*"mp4v")
-    writer    = cv2.VideoWriter(str(path), fourcc, FPS_LIMIT, (FRAME_WIDTH, FRAME_HEIGHT))
+    """
+    Saves the buffered frames and forces a background H.264 codec re-encoding
+    to guarantee full streaming playback compatibility inside browser engines.
+    """
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    temp_name = f"raw_temp_{event_type}_{ts}.mp4"
+    final_name = f"{event_type}_{ts}.mp4"
+    
+    temp_path = CLIPS_DIR / temp_name
+    final_path = CLIPS_DIR / final_name
+    url = f"/incident_clips/{final_name}"
+    
+    # Fast container compilation via OpenCV raw writing parameters
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = cv2.VideoWriter(str(temp_path), fourcc, FPS_LIMIT, (FRAME_WIDTH, FRAME_HEIGHT))
     for f in frames:
         writer.write(f)
     writer.release()
-    logger.info(f"✓ Exported incident media block segment locally: {path}")
-    return str(path), url
+    
+    # ── Background Web-Codec H.264 Transcoding Alignment via FFmpeg ───────
+    cmd = [
+        'ffmpeg', '-y', 
+        '-i', str(temp_path), 
+        '-vcodec', 'libx264', 
+        '-pix_fmt', 'yuv420p', 
+        '-profile:v', 'baseline', 
+        '-level', '3.0', 
+        '-an',  # Drops nonexistent audio channels to optimize space footprint
+        str(final_path)
+    ]
+    try:
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        if temp_path.exists():
+            os.remove(temp_path)
+        logger.info(f"✓ Exported web-ready H.264 incident media block: {final_path.name}")
+        return str(final_path), url
+    except Exception as e:
+        logger.error(f"⚠️ Web transcoding processing error. Reverting to basic profile. Context: {e}")
+        if temp_path.exists():
+            if final_path.exists():
+                os.remove(final_path)
+            os.rename(temp_path, final_path)
+        return str(final_path), url
 
 
 def patch_clip(incident_id: str, clip_url: str, token: str):
@@ -252,14 +290,12 @@ def fire_alert(frame, frame_buffer, camera_id, token, event_type):
 
 # =========================================================================
 # ASYNCHRONOUS DEEP LEARNING INFERENCE THREAD BLOCK
-# Evaluates incoming webcam frame matrices concurrently using Decay Counter Logic
 # =========================================================================
 
 def inference_thread_fn(fall_model, violence_model, camera_id, token,
                         frame_buffer, stop_event):
     frame_count = 0
 
-    # Define metadata structure definitions exactly matching class configurations
     FALL_LABELS     = {0: "Non fall", 1: "Fall"}
     VIOLENCE_LABELS = {0: "Non-Violence", 1: "Violence"}
 
@@ -276,7 +312,6 @@ def inference_thread_fn(fall_model, violence_model, camera_id, token,
 
         frame_count += 1
 
-        # Run simultaneous evaluations on parallel intelligence model structures
         fall_results     = fall_model(frame,     imgsz=640, conf=0.4, verbose=False)
         violence_results = violence_model(frame, imgsz=640, conf=0.4, verbose=False)
 
@@ -284,7 +319,7 @@ def inference_thread_fn(fall_model, violence_model, camera_id, token,
         fall_detected     = False
         violence_detected = False
 
-        # 1. Process Fall Detection outputs and map tracking labels safely
+        # 1. Process Fall Detection outputs
         for r in fall_results:
             if r.boxes is not None:
                 for box, score, cls in zip(r.boxes.xyxy.cpu().numpy(),
@@ -292,18 +327,16 @@ def inference_thread_fn(fall_model, violence_model, camera_id, token,
                                            r.boxes.cls.cpu().numpy()):
                     x1, y1, x2, y2 = map(int, box)
                     class_id = int(cls)
-                    
                     label_name = FALL_LABELS.get(class_id, "Unknown")
                     
                     if label_name == "Fall":
                         if score >= FALL_CONFIDENCE_THRESHOLD:
                             fall_detected = True
                     
-                    # Style layouts: Critical states utilize Red boundaries, standard uses Green
                     color = (0, 0, 255) if label_name == "Fall" else (0, 255, 0)
                     new_boxes.append((x1, y1, x2, y2, f"{label_name} {score:.2f}", score, color))
 
-        # 2. Process Violence Detection outputs and map tracking labels safely
+        # 2. Process Violence Detection outputs
         for r in violence_results:
             if r.boxes is not None:
                 for box, score, cls in zip(r.boxes.xyxy.cpu().numpy(),
@@ -311,74 +344,60 @@ def inference_thread_fn(fall_model, violence_model, camera_id, token,
                                            r.boxes.cls.cpu().numpy()):
                     x1, y1, x2, y2 = map(int, box)
                     class_id = int(cls)
-                    
                     label_name = VIOLENCE_LABELS.get(class_id, "Unknown")
                     
                     if label_name == "Violence":
                         if score >= VIOLENCE_CONFIDENCE_THRESHOLD:
                             violence_detected = True
                     
-                    # Style layouts: Volatile states utilize Blue boundaries, standard uses Green
                     color = (255, 0, 0) if label_name == "Violence" else (0, 255, 0)
                     new_boxes.append((x1, y1, x2, y2, f"{label_name} {score:.2f}", score, color))
 
-        # ── Thread-Safe Memory Sync utilizing Advanced Decay/Discharge Logic ──
         with state.lock:
             state.boxes = new_boxes
 
-            # Advanced Fall Tracker: Slowly step down instead of instantly wiping to 0
             if fall_detected:
                 state.fall_counter += 1
             else:
                 if state.fall_counter > 0:
-                    state.fall_counter -= 1  # Decay step protects against static lying states
+                    state.fall_counter -= 1
 
-            # Advanced Violence Tracker: Step down slowly to reduce false alarms
             if violence_detected:
                 state.violence_counter += 1
             else:
                 if state.violence_counter > 0:
-                    state.violence_counter -= 1  # Decay step stabilizes fast moving actions
+                    state.violence_counter -= 1
 
             fc = state.fall_counter
             vc = state.violence_counter
             current_frame = frame.copy()
 
-        # ── Isolated Event Handlers (Split fully to ensure clean target argument naming) ──
-        
         # Fire verified Fall alert networks
         if fc >= FALL_THRESHOLD:
             fire_alert(current_frame, frame_buffer, camera_id, token, "fall")
             with state.lock:
-                state.fall_counter = 0  # Fully flush accumulator post transmission
+                state.fall_counter = 0
 
         # Fire verified Violence alert networks
         if vc >= VIOLENCE_THRESHOLD:
             fire_alert(current_frame, frame_buffer, camera_id, token, "violence")
             with state.lock:
-                state.violence_counter = 0  # Fully flush accumulator post transmission
+                state.violence_counter = 0
 
 
 # =========================================================================
 # MAIN LIVE RENDERING ENGINE WINDOW LOOP
-# Captures incoming video and renders overlay metrics on presentation frame
 # =========================================================================
 
 def run_detection(token: str, camera_data: dict):
     fall_model, violence_model = load_models()
 
-    # Extract configurations dynamically from the server payload dictionary
     camera_id   = camera_data.get("camera_id")
     camera_name = camera_data.get("camera_name", "Unknown")
     
-    # --- SMART HARDWARE INTERFACE OVERRIDE ---
-    # Since your DB doesn't have a hardware_index column yet, we look at the camera profile.
-    # If the user selects the second camera ("manager cam2"), route it to index 1 (Iriun).
-    # Otherwise, it falls back to index 0 (Integrated Laptop Cam).
     if "cam2" in camera_name.lower():
         hw_index = 1
     else:
-        # Gracefully fall back to database field or default index 0
         hw_index = camera_data.get("hardware_index", 0)
 
     logger.info(f"Dynamically routing to database camera profile: {camera_name}")
@@ -420,7 +439,7 @@ def run_detection(token: str, camera_data: dict):
         fps_frames  += 1
         frame_buffer.append(frame.copy())
 
-        # ── Rapid motion estimation matrix checking routine ──
+        # Rapid motion estimation matrix checking routine
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         gray = cv2.GaussianBlur(gray, (11, 11), 0)
         motion_score = 0
@@ -433,26 +452,22 @@ def run_detection(token: str, camera_data: dict):
         with state.lock:
             state.motion_score = motion_score
 
-        # ── Direct frame to target deep learning thread at configured intervals ──
         if frame_count % INFERENCE_INTERVAL == 0:
             with state.lock:
                 state.inference_frame = frame.copy()
                 state.new_frame_ready = True
 
-        # ── Fetch processed graphical elements shapes metrics safely ──
         with state.lock:
             boxes         = list(state.boxes)
             fall_counter  = state.fall_counter
             viol_counter  = state.violence_counter
             alert_sending = state.alert_sending
 
-        # Draw box coordinates onto raw screen frame layers
         for (x1, y1, x2, y2, label, score, color) in boxes:
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
             cv2.putText(frame, label, (x1, y1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
-        # ── Live UI execution tracking updates ──
         now = time.time()
         if now - fps_clock >= 1.0:
             with state.lock:
@@ -463,7 +478,6 @@ def run_detection(token: str, camera_data: dict):
         with state.lock:
             fps = state.fps
 
-        # ── Overlay layout metrics texts parameters across display frame matrix ──
         cv2.putText(frame, f"FPS: {fps:.1f}",
                     (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
         cv2.putText(frame, f"Motion Score: {motion_score}",
@@ -481,14 +495,12 @@ def run_detection(token: str, camera_data: dict):
                     (10, FRAME_HEIGHT - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
 
-        # Unique window title tags protect against display overlapping clashing errors
         cv2.imshow(f"Yaqidh Monitor: {camera_name}", frame)
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
             break
 
-    # Cleanly release system hooks and clear thread tracking flags
     stop_event.set()
     cap.release()
     cv2.destroyAllWindows()
@@ -501,5 +513,5 @@ def run_detection(token: str, camera_data: dict):
 
 if __name__ == "__main__":
     token, role = login()
-    camera_data = select_camera(token, role) # Fetches database dictionary payload maps
-    run_detection(token, camera_data)        # Dispatches live loops dynamically
+    camera_data = select_camera(token, role)
+    run_detection(token, camera_data)
