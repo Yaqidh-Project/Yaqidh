@@ -146,16 +146,16 @@ async def step_3_get_camera() -> Optional[tuple[str, str]]:
 async def step_4_create_test_image() -> Optional[Path]:
     print_step(4, "Loading Real Threat Test Image")
     
-    # تحديد مسار الصورة الحقيقية المتوقعة بجانب السكريبت
-    image_path = Path("danger_test.jpg")
+    script_dir = Path(__file__).parent
+    image_path = script_dir / "danger_test.jpg"
     
     if image_path.exists():
         file_size = image_path.stat().st_size
         print_success("Real test image found!", f"File: {image_path.name} ({file_size} bytes)")
         return image_path
     else:
-        print_error(f"Could not find '{image_path.name}' in Backend folder!")
-        print_info(f"Please put a real danger image named '{image_path.name}' inside the Backend/ folder so YOLO can detect it")
+        print_error(f"Could not find '{image_path.name}' in the script directory!")
+        print_info(f"Expected path: {image_path.absolute()}")
         return None
 
 
