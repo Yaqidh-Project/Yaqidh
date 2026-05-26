@@ -71,6 +71,34 @@ async def create_teacher(
 
 
 @router.get(
+    "/teachers",
+    response_model=list[UserOut],
+    summary="Get all teachers in the current manager's zones",
+)
+async def get_teachers(
+    current_user: User = Depends(require_roles("Manager")),  # FIX: was get_current_user
+    db: AsyncSession = Depends(get_db),
+):
+    zone_query = await db.execute(
+        select(Zone)
+        .join(Zone.users)
+        .where(User.user_id == current_user.user_id)
+        .options(selectinload(Zone.users))
+    )
+    zones = zone_query.scalars().all()
+
+    seen = set()
+    teachers = []
+    for zone in zones:
+        for user in zone.users:
+            if user.role_name == "Teacher" and user.user_id not in seen:
+                seen.add(user.user_id)
+                teachers.append(user)
+
+    return teachers
+
+
+@router.get(
     "/performance-dashboard",
     response_model=PerformanceDashboardOut,
     summary="Get performance and response times across all nursery zones (Manager only)",
@@ -83,13 +111,12 @@ async def get_performance_dashboard(
     Compiles real-time metrics for the manager dashboard, ISOLATED strictly
     to the logged-in manager's nursery data.
     """
-    # FIX: Join the assigned_to table and filter strictly by the current manager's user_id
     zone_query = await db.execute(
         select(Zone)
         .join(Zone.users)
-        .where(User.user_id == current_user.user_id)  # <-- THIS ENFORCES ABSOLUTE ISOLATION
+        .where(User.user_id == current_user.user_id)
         .options(
-            selectinload(Zone.users), 
+            selectinload(Zone.users),
             selectinload(Zone.cameras)
         )
     )
@@ -102,22 +129,21 @@ async def get_performance_dashboard(
 
     for zone in zones:
         camera_ids = [cam.camera_id for cam in zone.cameras]
-        # Renamed variable to teachers
         teachers = [user.full_name for user in zone.users if user.role_name == "Teacher"]
-        
+
         if not camera_ids:
             zones_performance.append(
                 ZonePerformanceMetric(
                     zone_id=zone.zone_id,
                     zone_name=zone.zone_name,
-                    assigned_teachers=teachers,  # Updated parameter name
+                    assigned_teachers=teachers,
                     total_incidents=0,
                     resolved_incidents=0,
                     average_response_time_seconds=None
                 )
             )
             continue
-            
+
         incident_query = await db.execute(
             select(
                 func.count(Incident.incident_id).label("total"),
@@ -127,22 +153,21 @@ async def get_performance_dashboard(
                 ).label("total_time")
             ).where(Incident.camera_id.in_(camera_ids))
         )
-        
+
         metrics = incident_query.tuples().one_or_none()
-        
+
         total_incidents = 0
         resolved_incidents = 0
         total_time = 0.0
-        
+
         if metrics:
             total_incidents = metrics[0] or 0
             resolved_incidents = metrics[1] or 0
             total_time = float(metrics[2]) if metrics[2] is not None else 0.0
-            
+
         avg_time = None
         if resolved_incidents > 0:
             avg_time = round(total_time / resolved_incidents, 2)
-            
             total_nursery_incidents += total_incidents
             total_nursery_resolved += resolved_incidents
             total_nursery_response_time += total_time
@@ -151,7 +176,7 @@ async def get_performance_dashboard(
             ZonePerformanceMetric(
                 zone_id=zone.zone_id,
                 zone_name=zone.zone_name,
-                assigned_teachers=teachers,  # Updated parameter name
+                assigned_teachers=teachers,
                 total_incidents=total_incidents,
                 resolved_incidents=resolved_incidents,
                 average_response_time_seconds=avg_time
