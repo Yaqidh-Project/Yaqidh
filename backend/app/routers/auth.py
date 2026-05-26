@@ -124,6 +124,7 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     return TokenResponse(
         access_token=create_access_token(token_data),
         refresh_token=create_refresh_token(token_data),
+        role=user.role_name.value if hasattr(user.role_name, 'value') else user.role_name,
     )
 
 
@@ -162,6 +163,7 @@ async def refresh_token(payload: RefreshRequest, db: AsyncSession = Depends(get_
     return TokenResponse(
         access_token=create_access_token(token_data),
         refresh_token=create_refresh_token(token_data),
+        role=user.role_name.value if hasattr(user.role_name, 'value') else user.role_name,
     )
 
 
