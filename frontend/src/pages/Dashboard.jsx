@@ -25,18 +25,44 @@ const StatCard = ({ title, value, icon: Icon, color }) => (
   </div>
 );
 
+// Build the human-readable event detail message based on type and severity
+function buildEventMessage(incident) {
+  const type = (incident.incident_type || '').toLowerCase();
+  const category = (incident.danger_category || '').toLowerCase();
+  const zone = incident.zone_name || 'unknown zone';
+
+  const isFall = type.includes('fall');
+  const isViolence = type.includes('violen') || type.includes('fight') || type.includes('physical');
+
+  if (category === 'critical') {
+    if (isFall) return `Child fall detected in ${zone}`;
+    if (isViolence) return `High physical proximity detected between two children in ${zone}`;
+  }
+
+  if (category === 'warning') {
+    if (isViolence) return `Unusual physical interaction detected in ${zone}`;
+    if (isFall) return `Possible fall behaviour detected in ${zone}`;
+  }
+
+  // Fallback
+  return `Event recorded in ${zone}`;
+}
+
 export default function Dashboard() {
   const [activeFilter, setActiveFilter] = useState('all');
+  const [userName, setUserName] = useState('');
   const [userRole, setUserRole] = useState('User');
+  const [activeCameras, setActiveCameras] = useState(null); // FIX 2: real count
   const [recentActivity, setRecentActivity] = useState([]);
   const [performanceData, setPerformanceData] = useState(null);
   const [isLoadingPerformance, setIsLoadingPerformance] = useState(false);
 
   useEffect(() => {
+    // Get role from login response in localStorage
     let role = 'manager';
     try {
-      const user = JSON.parse(localStorage.getItem('user'));
-      if (user && user.role) role = user.role.toLowerCase();
+      const auth = JSON.parse(localStorage.getItem('user'));
+      if (auth?.role) role = auth.role.toLowerCase();
     } catch (e) {}
 
     const roleNames = {
@@ -45,6 +71,28 @@ export default function Dashboard() {
       parent: 'Parent/Caregiver'
     };
     setUserRole(roleNames[role] || 'User');
+
+    // Fetch full_name from /users/me
+    axiosInstance.get('/users/me')
+      .then(res => {
+        if (res.data?.full_name) setUserName(res.data.full_name);
+      })
+      .catch(err => {
+        console.error('Error loading user profile:', err);
+      });
+
+    // FIX 2: fetch real camera count
+    axiosInstance.get('/cameras')
+      .then(res => {
+        const cameras = res.data;
+        const total = cameras.length;
+        const active = cameras.filter(c => c.status === 'active' || c.is_active).length;
+        setActiveCameras(`${active}/${total}`);
+      })
+      .catch(err => {
+        console.error('Error loading cameras:', err);
+        setActiveCameras('—');
+      });
 
     if (role === 'manager') {
       setIsLoadingPerformance(true);
@@ -66,7 +114,8 @@ export default function Dashboard() {
           type: inc.danger_category?.toLowerCase() === 'critical' ? 'critical' : 'warning',
           message: inc.incident_type,
           time: new Date(inc.timestamp).toLocaleTimeString(),
-          details: `Event recorded at camera scope.`
+          // FIX 3: descriptive message based on type + severity + zone
+          details: buildEventMessage(inc),
         }));
         setRecentActivity(mappedActivities);
       })
@@ -100,14 +149,21 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <header className="mb-6">
+        {/* FIX 1: show the user's actual name, fall back to role if name isn't available */}
         <h2 className="text-2xl font-bold text-slate-800">
-          Welcome back, {userRole}
+          Welcome back, {userName || userRole}
         </h2>
         <p className="text-slate-500">System Status: <span className="text-emerald-600 font-medium">Monitoring Active</span></p>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <StatCard title="Active Cameras" value={userRole === 'Parent/Caregiver' ? '3/3' : '4/4'} icon={ShieldCheck} color="bg-emerald-500" />
+        {/* FIX 2: use real activeCameras state */}
+        <StatCard
+          title="Active Cameras"
+          value={activeCameras ?? 'Loading...'}
+          icon={ShieldCheck}
+          color="bg-emerald-500"
+        />
         <StatCard title="Today's Incidents" value={filteredActivity.length} icon={AlertOctagon} color="bg-rose-500" />
         {userRole === 'Nursery Manager' && (
           <StatCard 
