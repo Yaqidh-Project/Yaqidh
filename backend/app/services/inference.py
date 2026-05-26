@@ -25,7 +25,7 @@ except ImportError:
 FALL_LABELS     = ["Non fall", "Fall"]
 VIOLENCE_LABELS = ["Non-Violence", "Violence"]
 INPUT_SIZE      = 640
-CONF_THRESH     = 0.4
+CONF_THRESH     = 0.35  # Base detection filter inside ONNX
 IOU_THRESH      = 0.45
 
 
@@ -71,44 +71,8 @@ class ModelInference:
         img   = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         return img
 
-    def _extract_first_frame(self, video_bytes: bytes) -> "np.ndarray | None":
-        if not CV2_AVAILABLE:
-            return None
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-        try:
-            tmp.write(video_bytes)
-            tmp.flush()
-            tmp.close()
-            cap = cv2.VideoCapture(tmp.name)
-            try:
-                ret, frame = cap.read()
-                return frame if ret else None
-            finally:
-                cap.release()
-        except Exception as e:
-            logger.warning(f"Failed to extract video frame: {e}")
-            return None
-        finally:
-            try:
-                os.unlink(tmp.name)
-            except OSError:
-                pass
-
-    def preprocess_frame(self, image_bytes: bytes, is_video: bool = False) -> tuple:
-        img = None
-        if CV2_AVAILABLE:
-            if is_video:
-                img = self._extract_first_frame(image_bytes)
-                if img is None:
-                    logger.warning("Could not extract video frame — using blank image")
-            else:
-                img = self._decode_image(image_bytes)
-                if img is None:
-                    logger.warning("Could not decode image bytes — using blank image")
-
-        if img is None:
-            img = np.zeros((640, 640, 3), dtype=np.uint8)
-
+    def _prepare_ndarray_input(self, img: np.ndarray) -> tuple:
+        """ Preprocesses an image frame matrix to meet ONNX size and color standard requirements """
         orig_shape = img.shape
         size       = INPUT_SIZE
         h, w       = img.shape[:2]
@@ -116,7 +80,6 @@ class ModelInference:
         nh, nw     = int(h * scale), int(w * scale)
 
         resized = cv2.resize(img, (nw, nh))
-
         pad_h = (size - nh) // 2
         pad_w = (size - nw) // 2
         padded = cv2.copyMakeBorder(
@@ -133,21 +96,19 @@ class ModelInference:
 
         return arr, scale, pad_w, pad_h, orig_shape
 
-    def _predict_from_array(self, model_name: str, preprocessed: tuple) -> dict:
+    def _run_model_inference_on_preprocessed(self, model_name: str, preprocessed: tuple) -> dict:
+        """ Runs raw ONNX session inferences and processes output boundary calculations """
         input_array, scale, pad_w, pad_h, orig_shape = preprocessed
 
         if model_name == "fall_detection":
             session = self.fall_session
             labels  = FALL_LABELS
-        elif model_name == "violence_detection":
+        else:
             session = self.violence_session
             labels  = VIOLENCE_LABELS
-        else:
-            raise ValueError(f"Unknown model: {model_name}")
 
         if session is None:
-            logger.warning(f"[{model_name}] No session — returning stub")
-            return {"model": model_name, "label": labels[0], "confidence": 0.5, "stub": True}
+            return {"model": model_name, "label": labels[0], "confidence": 0.5, "stub": True, "boxes": []}
 
         input_name = session.get_inputs()[0].name
         raw        = session.run(None, {input_name: input_array})
@@ -163,7 +124,7 @@ class ModelInference:
         boxes     = pred[mask, :4]
 
         if len(scores) == 0:
-            return {"model": model_name, "label": labels[0], "confidence": 0.0, "stub": False}
+            return {"model": model_name, "label": labels[0], "confidence": 0.0, "stub": False, "boxes": []}
 
         x1 = (boxes[:, 0] - boxes[:, 2] / 2 - pad_w) / scale
         y1 = (boxes[:, 1] - boxes[:, 3] / 2 - pad_h) / scale
@@ -184,9 +145,13 @@ class ModelInference:
         )
 
         if len(indices) == 0:
-            return {"model": model_name, "label": labels[0], "confidence": 0.0, "stub": False}
+            return {"model": model_name, "label": labels[0], "confidence": 0.0, "stub": False, "boxes": []}
 
-        best_idx   = int(indices[0]) if isinstance(indices[0], (int, np.integer)) else int(indices[0][0])
+        final_boxes = []
+        for idx in indices.flatten():
+            final_boxes.append([float(x1[idx]), float(y1[idx]), float(x2[idx]), float(y2[idx])])
+
+        best_idx   = int(indices.flatten()[0])
         confidence = float(scores[best_idx])
         label_idx  = int(class_ids[best_idx])
         label      = labels[label_idx] if label_idx < len(labels) else "unknown"
@@ -196,21 +161,105 @@ class ModelInference:
             "label":      label,
             "confidence": round(confidence, 4),
             "stub":       False,
+            "boxes":      final_boxes
         }
+
+    def _process_video_inference(self, video_bytes: bytes, model_mode: str = "both") -> dict:
+        """ 
+        PROPER TEMPORAL AGGREGATION: Decodes the clip frame-by-frame,
+        isolating positive detections with maximum historical confidence.
+        """
+        if not CV2_AVAILABLE:
+            return {"fall_detection": {"model": "fall_detection", "label": FALL_LABELS[0], "confidence": 0.0, "stub": True, "boxes": []}}
+
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".webm")
+        
+        # Base initial state for non-incidents safely set to 0.0
+        max_fall = {"model": "fall_detection", "label": FALL_LABELS[0], "confidence": 0.0, "stub": False, "boxes": []}
+        max_violence = {"model": "violence_detection", "label": VIOLENCE_LABELS[0], "confidence": 0.0, "stub": False, "boxes": []}
+
+        try:
+            tmp.write(video_bytes)
+            tmp.flush()
+            tmp.close()
+            
+            cap = cv2.VideoCapture(tmp.name)
+            frame_count = 0
+            frame_step = 2  # Sweeter spot for temporal tracking precision
+            
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                
+                if frame_count % frame_step == 0:
+                    preprocessed = self._prepare_ndarray_input(frame)
+                    
+                    # 1. Fall Detection Aggregator
+                    if model_mode in ("fall_detection", "both"):
+                        res = self._run_model_inference_on_preprocessed("fall_detection", preprocessed)
+                        # Securely trap ONLY true positives or high-confidence locks
+                        if res["label"].lower() == "fall":
+                            if res["confidence"] > max_fall["confidence"] or max_fall["label"].lower() != "fall":
+                                max_fall = res
+                        else:
+                            # If no fall is caught yet, retain the fallback non-fall with maximum telemetry
+                            if max_fall["label"].lower() != "fall" and res["confidence"] >= max_fall["confidence"]:
+                                max_fall = res
+
+                    # 2. Violence Detection Aggregator
+                    if model_mode in ("violence_detection", "both"):
+                        res = self._run_model_inference_on_preprocessed("violence_detection", preprocessed)
+                        if res["label"].lower() == "violence":
+                            if res["confidence"] > max_violence["confidence"] or max_violence["label"].lower() != "violence":
+                                max_violence = res
+                        else:
+                            if max_violence["label"].lower() != "violence" and res["confidence"] >= max_violence["confidence"]:
+                                max_violence = res
+                                
+                frame_count += 1
+            cap.release()
+        except Exception as e:
+            logger.warning(f"Failed to extract or process sequential video frame bounds: {e}")
+        finally:
+            try:
+                os.unlink(tmp.name)
+            except OSError:
+                pass
+
+        if model_mode == "fall_detection":
+            return max_fall
+        elif model_mode == "violence_detection":
+            return max_violence
+        return {"fall_detection": max_fall, "violence_detection": max_violence}
 
     def predict(self, model_name: str, image_bytes: bytes, is_video: bool = False) -> dict:
         if not image_bytes:
             raise ValueError("image_bytes must not be empty")
-        preprocessed = self.preprocess_frame(image_bytes, is_video=is_video)
-        return self._predict_from_array(model_name, preprocessed)
+        
+        if is_video:
+            return self._process_video_inference(image_bytes, model_mode=model_name)
+            
+        img = self._decode_image(image_bytes)
+        if img is None:
+            img = np.zeros((640, 640, 3), dtype=np.uint8)
+        preprocessed = self._prepare_ndarray_input(img)
+        return self._run_model_inference_on_preprocessed(model_name, preprocessed)
 
     def predict_both(self, image_bytes: bytes, is_video: bool = False) -> dict:
         if not image_bytes:
             raise ValueError("image_bytes must not be empty")
-        preprocessed = self.preprocess_frame(image_bytes, is_video=is_video)
+            
+        if is_video:
+            return self._process_video_inference(image_bytes, model_mode="both")
+            
+        img = self._decode_image(image_bytes)
+        if img is None:
+            img = np.zeros((640, 640, 3), dtype=np.uint8)
+        preprocessed = self._prepare_ndarray_input(img)
         return {
-            "fall_detection":     self._predict_from_array("fall_detection",     preprocessed),
-            "violence_detection": self._predict_from_array("violence_detection", preprocessed),
+            "fall_detection":     self._run_model_inference_on_preprocessed("fall_detection",     preprocessed),
+            "violence_detection": self._run_model_inference_on_preprocessed("violence_detection", preprocessed),
         }
 
 
