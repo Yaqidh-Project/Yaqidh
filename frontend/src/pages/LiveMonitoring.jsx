@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Activity, 
-  Wifi, 
   Maximize2, 
   Camera,
   CameraOff,
@@ -11,45 +10,174 @@ import {
 } from 'lucide-react';
 import axiosInstance from '../api/axiosInstance';
 
-// Enhanced CameraFeed with dynamic index-based hardware selection configuration
+/**
+ * CameraFeed Component
+ * Captures live hardware video tracks and streams lightweight compressed JPEG frames
+ * to the backend YOLOv8 ONNX pipeline sequentially for instant drop-down risk detection.
+ */
 const CameraFeed = ({ id, name, index }) => {
   const [time, setTime] = useState(new Date().toLocaleTimeString());
   const [isStreaming, setIsStreaming] = useState(false);
   const [liveAlert, setLiveAlert] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  
   const videoRef = useRef(null);
   const wsRef = useRef(null);
+  const streamRef = useRef(null);
+  
+  // FIXED: Using a strict numeric session ID to completely invalidate cloned/ghost background intervals
+  const streamSessionIdRef = useRef(0);
 
+  // Synchronize internal UI digital clock representation
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date().toLocaleTimeString()), 1000);
     return () => clearInterval(timer);
   }, []);
 
+  /**
+   * ABSOLUTE HARD TEARDOWN ON UNMOUNT
+   * Enforces zero background activity when Aliyah leaves the monitoring page.
+   */
   useEffect(() => {
     return () => {
-      if (wsRef.current) wsRef.current.close();
+      // Incrementing the ID instantly invalidates any currently running async intervals in browser memory
+      streamSessionIdRef.current += 1;
+      
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
     };
   }, []);
 
+  /**
+   * Safe teardown mechanism for manual stream termination via the UI toggle button
+   */
+  const stopInferencePipeline = () => {
+    // HARD LOCK: Invalidate the current session ID instantly to block all running background callbacks
+    streamSessionIdRef.current += 1;
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setIsStreaming(false);
+    setIsAnalyzing(false);
+    setLiveAlert(null);
+  };
+
+  /**
+   * Frame Capture Matrix Engine
+   * Orchestrates the active snapshot loop. Injected with a local state validation token
+   * to immediately self-destruct if the parent camera feed was terminated.
+   */
+  const spawnFrameInferenceLoop = (currentSessionId) => {
+    const runLoop = () => {
+      // STRICT LIFECYCLE CHECK: If the session ID changed, suicide this loop context immediately!
+      if (currentSessionId !== streamSessionIdRef.current || !videoRef.current || !streamRef.current || !streamRef.current.active) {
+        return;
+      }
+
+      const video = videoRef.current;
+      if (video.paused || video.ended) {
+        // Schedule next execution window if momentarily paused
+        setTimeout(runLoop, 300);
+        return;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 640; 
+      canvas.height = 480;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        setTimeout(runLoop, 300);
+        return;
+      }
+      
+      try {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      } catch (e) {
+        setTimeout(runLoop, 300);
+        return; // Guard against frame buffer locks
+      }
+      
+      canvas.toBlob(async (blob) => {
+        // RE-VERIFY TOKEN: Ensure camera wasn't killed during async compression processing time
+        if (currentSessionId !== streamSessionIdRef.current || !blob) return;
+        
+        const formData = new FormData();
+        formData.append('camera_id', id);
+        formData.append('frame', blob, `live_frame_${id}.jpg`);
+
+        try {
+          setIsAnalyzing(true);
+          const response = await axiosInstance.post('/inference/detect', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+
+          // FINAL CONTEXT VERIFICATION: Drop response UI mutations if session has been closed
+          if (currentSessionId !== streamSessionIdRef.current) return;
+
+          const { incident_created, incidents } = response.data;
+          setIsAnalyzing(false);
+
+          if (incident_created && incidents && incidents.length > 0) {
+            const detectedEvent = incidents[0];
+            const labelName = detectedEvent.incident_type.toUpperCase();
+            const confidence = (detectedEvent.confidence * 100).toFixed(0);
+            
+            setLiveAlert(`⚠️ CRITICAL HTTP: ${labelName} DETECTED inside ${name} (${confidence}% Confidence)`);
+            setTimeout(() => {
+              if (currentSessionId === streamSessionIdRef.current) setLiveAlert(null);
+            }, 4000);
+          }
+        } catch (err) {
+          if (currentSessionId === streamSessionIdRef.current) {
+            console.error(`Network frame processing dropped for camera ${name}:`, err);
+            setIsAnalyzing(false);
+          }
+        }
+
+        // Recursively trigger the next frame sample capture only if this session context remains alive
+        if (currentSessionId === streamSessionIdRef.current) {
+          setTimeout(runLoop, 300);
+        }
+      }, 'image/jpeg', 0.7);
+    };
+
+    // Trigger initial loop instantiation pass
+    setTimeout(runLoop, 300);
+  };
+
+  /**
+   * Hardware Media Device Negotiation Routing Engine
+   */
   const toggleWebcam = async () => {
     if (!id || id.includes('placeholder')) {
-      alert("No active camera hardware pipeline detected for this zone. Please add a camera in settings first.");
+      alert("No active camera hardware pipeline detected for this zone framework.");
       return;
     }
 
     if (isStreaming) {
-      if (videoRef.current && videoRef.current.srcObject) {
-        const tracks = videoRef.current.srcObject.getTracks();
-        tracks.forEach(track => track.stop());
-        videoRef.current.srcObject = null;
-      }
-      setIsStreaming(false);
-
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
+      stopInferencePipeline();
     } else {
       try {
-        // Enumerate all video capture hardware connected to the client platform
+        // Invalidate any trailing legacy loops by shifting the session ID boundary forward
+        streamSessionIdRef.current += 1;
+        const freshSessionId = streamSessionIdRef.current;
+
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = devices.filter(device => device.kind === 'videoinput');
         
@@ -57,51 +185,42 @@ const CameraFeed = ({ id, name, index }) => {
 
         if (videoDevices.length > 0) {
           if (index === 0) {
-            // Camera 1 Target: Explicitly look for a built-in or native integrated front camera
             const builtInCam = videoDevices.find(d => d.label.toLowerCase().includes('integrated') || d.label.toLowerCase().includes('built-in'));
-            if (builtInCam) {
-              constraints.video.deviceId = { exact: builtInCam.deviceId };
-            } else {
-              constraints.video.deviceId = { exact: videoDevices[0].deviceId };
-            }
-          } else if (index === 1) {
-            // Camera 2 Target: Explicitly search for external dynamic virtualization drivers like Iruun, EpocCam, or DroidCam
-            const externalCam = videoDevices.find(d => d.label.toLowerCase().includes('irun') || d.label.toLowerCase().includes('virtual') || d.label.toLowerCase().includes('wireless'));
-            if (externalCam) {
-              constraints.video.deviceId = { exact: externalCam.deviceId };
-            } else if (videoDevices[1]) {
-              // Fallback to the second hardware index slot if explicit names don't match strings
-              constraints.video.deviceId = { exact: videoDevices[1].deviceId };
-            }
+            constraints.video.deviceId = builtInCam ? { exact: builtInCam.deviceId } : { exact: videoDevices[0].deviceId };
           } else {
-            // Camera 3+ Targets: Cycle through remaining structural hardware indices dynamically
             const targetIndex = index < videoDevices.length ? index : videoDevices.length - 1;
             constraints.video.deviceId = { exact: videoDevices[targetIndex].deviceId };
           }
         }
 
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        streamRef.current = stream;
+
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           setIsStreaming(true);
+
+          // INJECT CURRENT SESSION ID: Tethers the recursive loop straight to this operational life window
+          spawnFrameInferenceLoop(freshSessionId);
         }
 
-        // Establish real-time websocket connection using secure environment tokens
         const token = localStorage.getItem('token');
         const wsUrl = `${import.meta.env.VITE_WS_BASE_URL}/ws/notifications?token=${token}`;
         wsRef.current = new WebSocket(wsUrl);
 
         wsRef.current.onmessage = (event) => {
           const data = JSON.parse(event.data);
-          if (data.event === "incident_created" && data.camera_id === id) {
-            setLiveAlert(`⚠️ DETECTED: ${data.incident_type} inside ${name}!`);
-            setTimeout(() => setLiveAlert(null), 5000); 
+          if (freshSessionId === streamSessionIdRef.current && ((data.event === "incident_detected" || data.event === "incident_created") && data.camera_id === id)) {
+            setLiveAlert(`⚠️ DB RECORDED: ${data.incident_type.toUpperCase()} alert tracked inside ${name}!`);
+            setTimeout(() => {
+              if (freshSessionId === streamSessionIdRef.current) setLiveAlert(null);
+            }, 5000); 
           }
         };
 
       } catch (err) {
-        console.error(`Error activating video feed for ${name}:`, err);
-        alert(`Could not initialize camera pipeline for ${name}. Ensure hardware access is granted.`);
+        console.error(`Error activating media layout stream layers for ${name}:`, err);
+        alert(`Could not initialize camera pipeline for ${name}. Verify system permissions.`);
       }
     }
   };
@@ -120,7 +239,7 @@ const CameraFeed = ({ id, name, index }) => {
           {isStreaming ? (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-600 border border-red-400/50 shadow-lg shadow-red-900/20">
               <div className="w-2 h-2 rounded-full bg-white animate-pulse"></div>
-              <span className="text-[10px] font-black text-white tracking-widest uppercase">Live</span>
+              <span className="text-[10px] font-black text-white tracking-widest uppercase">Live Stream</span>
             </div>
           ) : (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/80 backdrop-blur-md border border-slate-600/50">
@@ -134,6 +253,7 @@ const CameraFeed = ({ id, name, index }) => {
           ref={videoRef}
           autoPlay
           playsInline
+          muted
           className={`w-full h-full object-cover ${!isStreaming ? 'hidden' : 'block'}`}
         />
 
@@ -142,7 +262,7 @@ const CameraFeed = ({ id, name, index }) => {
             <div className="p-4 rounded-full bg-slate-900 border border-slate-800 shadow-inner">
               <CameraOff size={32} className="opacity-20" />
             </div>
-            <p className="text-xs font-mono tracking-tighter opacity-50 uppercase">System Armed // No Signal</p>
+            <p className="text-xs font-mono tracking-tighter opacity-50 uppercase">System Armed // Stream Offline</p>
             <button 
               onClick={toggleWebcam}
               className="mt-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-emerald-900/20"
@@ -163,8 +283,8 @@ const CameraFeed = ({ id, name, index }) => {
               {new Date().toLocaleDateString()} {time}
             </div>
             <div className="absolute bottom-4 left-4 font-mono text-[9px] text-emerald-400 bg-black/40 px-2 py-1 rounded flex items-center gap-1.5 backdrop-blur-sm border border-white/10">
-              <RefreshCw size={10} className="animate-spin" />
-              ANALYSIS ACTIVE: AI PIPELINE ONLINE
+              <RefreshCw size={10} className={isAnalyzing ? "animate-spin" : ""} />
+              {isAnalyzing ? "AI SYSTEM: TRANSMITTING PARALLEL FRAME SEGMENT..." : "AI SYSTEM: REAL-TIME THREAT SCANNING ACTIVE"}
             </div>
           </>
         )}
@@ -193,13 +313,15 @@ const CameraFeed = ({ id, name, index }) => {
   );
 };
 
+/**
+ * Main Layout Dashboard Root Module
+ */
 export default function LiveMonitoring() {
   const [cameras, setCameras] = useState([]);
   const [viewMode, setViewMode] = useState('all'); 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Dynamically fetch the complete structured array list of authorized cameras assigned to this user session context
     axiosInstance.get('/cameras') 
       .then(response => {
         const formattedCameras = response.data.map(cam => ({
@@ -210,7 +332,7 @@ export default function LiveMonitoring() {
         setLoading(false);
       })
       .catch(err => {
-        console.error("Failed to sync structural camera array matrix:", err);
+        console.error("Failed to sync camera tree data structures:", err);
         setLoading(false);
       });
   }, []);
@@ -229,9 +351,9 @@ export default function LiveMonitoring() {
         <div>
           <div className="flex items-center gap-2 text-emerald-600 mb-1">
             <Activity size={20} />
-            <span className="text-xs font-black uppercase tracking-[0.2em]">Real-Time Core Engine</span>
+            <span className="text-xs font-black uppercase tracking-[0.2em]">Live Safety Scanning</span>
           </div>
-          <h2 className="text-4xl font-black text-slate-900 tracking-tight">Live Monitoring Matrix</h2>
+          <h2 className="text-4xl font-black text-slate-900 tracking-tight">Live Camera Panel</h2>
         </div>
         
         {cameras.length > 1 && (
@@ -266,7 +388,6 @@ export default function LiveMonitoring() {
             ⚠️ No active cameras registered for this account zone framework.
           </div>
         ) : (
-          /* Dynamic Grid Alignment: Maps to 2 columns for multi-camera setups, adapts cleanly if more are returned */
           <div className={`grid gap-8 transition-all duration-500 ${
             viewMode === 'all' && cameras.length > 1 ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1 max-w-4xl mx-auto'
           }`}>

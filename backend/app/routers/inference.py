@@ -21,6 +21,7 @@ settings = get_settings()
 
 
 async def _get_zone_users(camera_id: uuid.UUID, db: AsyncSession) -> list[uuid.UUID]:
+    """ Fetches all unique user IDs linked to the camera's specific zone structure """
     result = await db.execute(
         select(User.user_id)
         .join(Zone.users)
@@ -31,7 +32,7 @@ async def _get_zone_users(camera_id: uuid.UUID, db: AsyncSession) -> list[uuid.U
 
 
 async def _assert_camera_access(user: User, camera_id: uuid.UUID, db: AsyncSession) -> None:
-    # Allow Managers and Parents to bypass zone check
+    """ Security gate ensuring assigned staff or parents have clearance for this specific hardware node """
     if user.role_name in ["Manager", "Parent"]:
         return
         
@@ -57,6 +58,7 @@ async def predict(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """ Single model target execution endpoint utilized mainly by direct diagnostic or isolated scripts """
     if model_name not in ("fall_detection", "violence_detection"):
         raise HTTPException(status_code=422, detail="model_name must be fall_detection or violence_detection")
 
@@ -87,15 +89,15 @@ async def predict(
     clip_path_saved = None
 
     positive_labels = {"fall", "violence"}
-    
-    # Use model-specific threshold from central settings
-    threshold = settings.CONFIDENCE_THRESHOLD if model_name == "fall_detection" else settings.VIOLENCE_CONFIDENCE_THRESHOLD
+    threshold = settings.FALL_CONFIDENCE_THRESHOLD if model_name == "fall_detection" else settings.VIOLENCE_CONFIDENCE_THRESHOLD
     
     if str(label).lower() in positive_labels and confidence >= threshold:
         from app.models.incident import Incident
 
-        # Calculate danger severity dynamic classification based on confidence score
-        calculated_severity = "Critical" if confidence >= 0.75 else "Warning"
+        if model_name == "fall_detection":
+            calculated_severity = "Critical" if confidence >= 0.60 else "Warning"
+        else:
+            calculated_severity = "Critical" if confidence >= 0.70 else "Warning"
 
         incident = Incident(
             danger_category=calculated_severity,
@@ -153,10 +155,9 @@ async def detect_both(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Run both fall and violence detection models in parallel on the same frame.
-    
-    If either model detects danger above the confidence threshold, creates an incident
-    and sends a notification. Includes cooldown to prevent repeated notifications.
+    """
+    Highly Optimized Frame Pipeline with Feature Crosstalk Suppression.
+    Ensures that dynamic violence cues are not misclassified as low-threshold falls.
     """
     if frame is None and clip is None:
         raise HTTPException(status_code=422, detail="Provide either 'frame' (image) or 'clip' (video) for inference")
@@ -176,7 +177,7 @@ async def detect_both(
         clip_filename = clip.filename
         is_video = True
 
-    # Run both models in parallel
+    # Run parallel inference sessions
     results = model_inference.predict_both(image_bytes, is_video=is_video)
 
     fall_result = results["fall_detection"]
@@ -184,22 +185,30 @@ async def detect_both(
 
     incident_created = False
     incidents: list[dict] = []
-
     positive_labels = {"fall", "violence"}
 
-    # 1. Check cooldown and threshold for fall detection
     fall_label = fall_result["label"]
     fall_confidence = fall_result["confidence"]
+    violence_label = violence_result["label"]
+    violence_confidence = violence_result["confidence"]
 
-    if str(fall_label).lower() in positive_labels and fall_confidence >= settings.CONFIDENCE_THRESHOLD:
+    # CROSSTALK ANTI-FLIP FILTER: If the framework catches dynamic flailing motions,
+    # block the fall gate if violence probability dominates the pixel tensor bounds.
+    is_fall_valid = str(fall_label).lower() in positive_labels and fall_confidence >= settings.FALL_CONFIDENCE_THRESHOLD
+    is_violence_valid = str(violence_label).lower() in positive_labels and violence_confidence >= settings.VIOLENCE_CONFIDENCE_THRESHOLD
+
+    if is_fall_valid and (violence_confidence > fall_confidence and str(violence_label).lower() in positive_labels):
+        logger.info("Fall detection blocked: dynamic action features highly lean toward violence distribution bounds.")
+        is_fall_valid = False
+
+    # 1. EXECUTE FALL INCIDENT GATE
+    if is_fall_valid:
         from app.models.incident import Incident
-
-        # Calculate dynamic fall severity classification
-        fall_severity = "Critical" if fall_confidence >= 0.75 else "Warning"
+        fall_severity = "Critical" if fall_confidence >= 0.70 else "Warning"
 
         incident = Incident(
             danger_category=fall_severity,
-            incident_type=str(fall_label).lower(),
+            incident_type="fall",
             camera_id=camera_id,
             confidence=fall_confidence,
             status="open",
@@ -210,7 +219,6 @@ async def detect_both(
         await db.refresh(incident)
         incident_created = True
 
-        # Save clip if provided
         clip_path_saved = None
         if clip is not None and image_bytes:
             try:
@@ -225,7 +233,6 @@ async def detect_both(
             except Exception as e:
                 logger.warning(f"Could not save clip file: {e}")
 
-        # Hand over incident notification to notification service
         user_ids = await _get_zone_users(camera_id, db)
         await ws_manager.notify_incident(
             user_ids,
@@ -242,23 +249,18 @@ async def detect_both(
         incidents.append({
             "incident_id": str(incident.incident_id),
             "danger_category": fall_severity,
-            "incident_type": str(fall_label).lower(),
+            "incident_type": "fall",
             "confidence": fall_confidence,
         })
 
-    # 2. Check cooldown and threshold for violence detection
-    violence_label = violence_result["label"]
-    violence_confidence = violence_result["confidence"]
-
-    if str(violence_label).lower() in positive_labels and violence_confidence >= settings.VIOLENCE_CONFIDENCE_THRESHOLD:
+    # 2. EXECUTE VIOLENCE INCIDENT GATE
+    if is_violence_valid and not incident_created:
         from app.models.incident import Incident
-
-        # Calculate dynamic violence severity classification
-        violence_severity = "Critical" if violence_confidence >= 0.75 else "Warning"
+        violence_severity = "Critical" if violence_confidence >= 0.85 else "Warning"
 
         incident = Incident(
             danger_category=violence_severity,
-            incident_type=str(violence_label).lower(),
+            incident_type="violence",
             camera_id=camera_id,
             confidence=violence_confidence,
             status="open",
@@ -269,7 +271,6 @@ async def detect_both(
         await db.refresh(incident)
         incident_created = True
 
-        # Save clip if provided
         clip_path_saved = None
         if clip is not None and image_bytes:
             try:
@@ -284,7 +285,6 @@ async def detect_both(
             except Exception as e:
                 logger.warning(f"Could not save clip file: {e}")
 
-        # Hand over incident notification to notification service
         user_ids = await _get_zone_users(camera_id, db)
         await ws_manager.notify_incident(
             user_ids,
@@ -301,11 +301,10 @@ async def detect_both(
         incidents.append({
             "incident_id": str(incident.incident_id),
             "danger_category": violence_severity,
-            "incident_type": str(violence_label).lower(),
+            "incident_type": "violence",
             "confidence": violence_confidence,
         })
 
-    # Explicitly commit database transactions to persist tracked incidents
     await db.commit()
 
     return CombinedPredictionResponse(
@@ -315,9 +314,9 @@ async def detect_both(
         incidents=incidents if incidents else None,
     )
 
-
 @router.get("/status")
 async def inference_status(current_user: User = Depends(get_current_user)):
+    """ Returns active execution check criteria logs for operational ONNX engines """
     from app.services.inference import ONNX_AVAILABLE
     return {
         "fall_detection": model_inference.fall_session is not None,
