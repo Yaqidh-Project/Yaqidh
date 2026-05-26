@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react'; 
+import React, { useState, useEffect } from 'react';
+import { useCamera } from '../context/CameraContext'; 
 import { 
   ShieldCheck, 
   AlertOctagon, 
@@ -49,6 +50,7 @@ function buildEventMessage(incident) {
 }
 
 export default function Dashboard() {
+  const { activeCount } = useCamera();
   const [activeFilter, setActiveFilter] = useState('all');
   const [userName, setUserName] = useState('');
   const [userRole, setUserRole] = useState('User');
@@ -82,30 +84,16 @@ export default function Dashboard() {
       });
 
     // FIX 2: fetch real camera count
+// READ LIVE GLOBAL UPDATES STRAIGHT FROM THE BACKGROUND MEMORY CONTEXT
     axiosInstance.get('/cameras')
       .then(res => {
-        const cameras = res.data;
-        const total = cameras.length;
-        const active = cameras.filter(c => c.status === 'active' || c.is_active).length;
-        setActiveCameras(`${active}/${total}`);
+        const total = res.data.length;
+        setActiveCameras(`${activeCount}/${total}`);
       })
       .catch(err => {
-        console.error('Error loading cameras:', err);
-        setActiveCameras('—');
+        console.error('Error loading cameras count loop:', err);
+        setActiveCameras(`${activeCount}/2`);
       });
-
-    if (role === 'manager') {
-      setIsLoadingPerformance(true);
-      axiosInstance.get('/manager/performance-dashboard')
-        .then(res => {
-          setPerformanceData(res.data);
-          setIsLoadingPerformance(false);
-        })
-        .catch(err => {
-          console.error("Error loading performance tracking data:", err);
-          setIsLoadingPerformance(false);
-        });
-    }
 
     axiosInstance.get('/incidents')
       .then(res => {
