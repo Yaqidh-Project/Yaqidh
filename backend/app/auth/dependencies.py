@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -12,15 +12,23 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 async def _load_user(
     credentials: HTTPAuthorizationCredentials | None,
+    token_query: str | None,
     db: AsyncSession,
 ) -> User:
-    if credentials is None:
+    # Get the token from either the header credentials or fallback to the query parameter
+    token = None
+    if credentials:
+        token = credentials.credentials
+    elif token_query:
+        token = token_query
+
+    if token is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authorization header missing",
+            detail="Authorization credentials missing (checked header and query token)",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    token = credentials.credentials
+        
     payload = verify_token(token, token_type="access")
     if not payload:
         raise HTTPException(
@@ -48,9 +56,10 @@ async def _load_user(
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    token: str | None = Query(None, alias="token"),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    return await _load_user(credentials, db)
+    return await _load_user(credentials, token, db)
 
 
 async def require_phone_verified(
