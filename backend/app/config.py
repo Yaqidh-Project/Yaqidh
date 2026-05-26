@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -17,6 +18,14 @@ class Settings(BaseSettings):
     PORT: int = 8000
     OTP_EXPIRE_MINUTES: int = 10
     ECHO_SQL: bool = False
+
+    # --- SECURE ENVIRONMENT BINDINGS ---
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: Optional[int] = None
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SENDER_EMAIL: Optional[str] = None
+    MANAGER_TEST_EMAIL: Optional[str] = None
 
     class Config:
         env_file = ".env"
