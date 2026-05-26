@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models.incident import Incident
 from app.models.camera import Camera
@@ -97,7 +98,7 @@ async def create_incident(
 async def list_incidents(
     skip: int = 0,
     limit: int = 50,
-    current_user: User = Depends(require_roles("Manager", "Parent", "Teacher")),  # تم إضافة Teacher هنا للربط الكامل
+    current_user: User = Depends(require_roles("Manager", "Parent", "Teacher")),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -106,26 +107,34 @@ async def list_incidents(
         .join(Camera.zone)
         .join(Zone.users)
         .where(User.user_id == current_user.user_id)
+        # Eagerly load camera and its zone so zone_name is available on the model
+        .options(selectinload(Incident.camera).selectinload(Camera.zone))
         .order_by(Incident.timestamp.desc())
         .offset(skip)
         .limit(limit)
     )
-    return result.scalars().all()
+    incidents = result.scalars().all()
+    return [IncidentOut.from_incident(i) for i in incidents]
 
 
 @router.get("/{incident_id}", response_model=IncidentOut)
 async def get_incident(
     incident_id: uuid.UUID,
-    current_user: User = Depends(require_roles("Manager", "Parent", "Teacher")), # تم إضافة Teacher هنا
+    current_user: User = Depends(require_roles("Manager", "Parent", "Teacher")),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Incident).where(Incident.incident_id == incident_id))
+    result = await db.execute(
+        select(Incident)
+        .where(Incident.incident_id == incident_id)
+        # Eagerly load camera and its zone so zone_name is available on the model
+        .options(selectinload(Incident.camera).selectinload(Camera.zone))
+    )
     incident = result.scalar_one_or_none()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
 
     await _assert_incident_access(current_user, incident, db)
-    return incident
+    return IncidentOut.from_incident(incident)
 
 
 @router.patch("/{incident_id}", response_model=IncidentOut)

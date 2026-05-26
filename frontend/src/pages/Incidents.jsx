@@ -131,8 +131,8 @@ export default function Incidents() {
         const mapped = response.data.map(item => ({
           id: item.incident_id,
           type: item.incident_type,
-          severity: item.danger_category === 'critical' ? 'critical' : 'warning',
-          location: 'Designated Camera Scope Zone',
+          severity: item.danger_category?.toLowerCase() === 'critical' ? 'critical' : 'warning',
+          location: item.zone_name || 'Unknown Zone',
           time: new Date(item.timestamp).toLocaleString(),
           relativeTime: item.status === 'resolved' ? 'Archived Log' : 'Active Alert',
           status: item.status?.toLowerCase() || 'active'
@@ -155,8 +155,8 @@ export default function Incidents() {
       .catch(err => console.error("Database update error context logic:", err));
   };
 
-  const activeSevere = incidents.filter(i => i.status === 'active' && i.severity === 'critical').length;
-  const activeWarnings = incidents.filter(i => i.status === 'active' && i.severity === 'warning').length;
+  const activeSevere = incidents.filter(i => i.status !== 'resolved' && i.severity === 'critical').length;
+const activeWarnings = incidents.filter(i => i.status !== 'resolved' && i.severity === 'warning').length;
   const isTeacher = currentUserRole === 'teacher';
 
   if (loading) {
