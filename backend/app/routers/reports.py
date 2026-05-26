@@ -17,9 +17,9 @@ from app.models.user import User
 from app.schemas.report import ReportOut, ReportFilterCriteria
 from app.auth.dependencies import require_roles
 
-# Import ReportLab modules for PDF generation
+# Import ReportLab modules for professional PDF generation
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
@@ -55,9 +55,9 @@ async def generate_report(
         query = query.where(Incident.timestamp >= filters.start_date)
     if filters.end_date:
         query = query.where(Incident.timestamp <= filters.end_date)
-    if filters.danger_category:
+    if filters.danger_category and filters.danger_category.value != "":
         query = query.where(Incident.danger_category == filters.danger_category.value)
-    if filters.status:
+    if filters.status and filters.status != "":
         query = query.where(Incident.status == filters.status)
     if filters.camera_id:
         query = query.where(Incident.camera_id == filters.camera_id)
@@ -75,7 +75,6 @@ async def generate_report(
         summary_parts += f" ({cat_details})"
 
     # Instantiate the report record by passing the M2M list during initialization.
-    # This securely circumvents lazy loading / MissingGreenlet exceptions in Async sessions.
     report = Report(
         filter_criteria=filters.model_dump(mode="json"),
         report_summary=summary_parts,
@@ -85,7 +84,7 @@ async def generate_report(
     db.add(report)
     await db.flush()
     
-    # Securely commit transaction block block to disk storage
+    # Securely commit transaction block to disk storage
     await db.commit()
 
     # Eagerly reload full relational tree schema structure to safely match response schema model
@@ -150,11 +149,16 @@ async def export_report_json(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Exports report metadata and nested incident entries into a raw structured secure JSON payload download file.
+    Exports report metadata and nested incident entries into structured payload.
+    Includes relational Zone information, Danger Category, and conditionally status for Managers.
     """
     result = await db.execute(
         select(Report)
-        .options(selectinload(Report.incidents))
+        .options(
+            selectinload(Report.incidents)
+            .selectinload(Incident.camera)
+            .selectinload(Camera.zone)
+        )
         .where(Report.report_id == report_id)
     )
     report = result.scalar_one_or_none()
@@ -164,23 +168,33 @@ async def export_report_json(
     if report.user_id != current_user.user_id:
         raise HTTPException(status_code=403, detail="Access denied to export this report")
 
+    is_manager = current_user.role_name.lower() == "manager"
+
+    incidents_payload = []
+    for i in report.incidents:
+        zone_name = i.camera.zone.zone_name if (i.camera and i.camera.zone) else "Unknown Zone"
+        
+        incident_data = {
+            "incident_id": str(i.incident_id),
+            "timestamp": i.timestamp.isoformat(),
+            "danger_category": i.danger_category.value if hasattr(i.danger_category, 'value') else str(i.danger_category),
+            "incident_type": i.incident_type,
+            "zone": zone_name,
+            "confidence": i.confidence,
+        }
+        
+        if is_manager:
+            incident_data["status"] = i.status
+            
+        incidents_payload.append(incident_data)
+
     payload = {
         "report_id": str(report.report_id),
         "generated_at": report.generated_at.isoformat(),
         "filter_criteria": report.filter_criteria,
         "report_summary": report.report_summary,
         "incident_count": len(report.incidents),
-        "incidents": [
-            {
-                "incident_id": str(i.incident_id),
-                "timestamp": i.timestamp.isoformat(),
-                "danger_category": i.danger_category,
-                "incident_type": i.incident_type,
-                "status": i.status,
-                "confidence": i.confidence,
-            }
-            for i in report.incidents
-        ],
+        "incidents": incidents_payload,
     }
     
     return JSONResponse(
@@ -199,11 +213,16 @@ async def export_report_pdf(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Dynamically constructs a formatted PDF safety document stream structure using ReportLab framework flowables.
+    Generates an executive-level, highly polished PDF report utilizing standard ReportLab structures.
+    Features modern color palettes, clean borders, dynamic table column structures, and strict role access maps.
     """
     result = await db.execute(
         select(Report)
-        .options(selectinload(Report.incidents))
+        .options(
+            selectinload(Report.incidents)
+            .selectinload(Incident.camera)
+            .selectinload(Camera.zone)
+        )
         .where(Report.report_id == report_id)
     )
     report = result.scalar_one_or_none()
@@ -213,59 +232,141 @@ async def export_report_pdf(
     if report.user_id != current_user.user_id:
         raise HTTPException(status_code=403, detail="Access denied to export this report")
 
-    # In-memory binary stream structure setup for performance efficiency
+    is_manager = current_user.role_name.lower() == "manager"
+
     buffer = BytesIO()
+    # 40 margins leave exactly 532 points of printable width
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
     story = []
     
-    # Config Document Document Style Elements Layout Sheet
+    # Professional Aesthetic Branding Definitions
+    BRAND_NAVY = colors.HexColor("#06217e")
+    BRAND_LIGHT_BG = colors.HexColor("#f8fafc")
+    TEXT_DARK = colors.HexColor("#1e293b")
+    BORDER_COLOR = colors.HexColor("#e2e8f0")
+    
     styles = getSampleStyleSheet()
+    
     title_style = ParagraphStyle(
-        'PDFTitle', parent=styles['Heading1'], fontSize=22, textColor=colors.HexColor("#1A365D"), spaceAfter=12
+        'PDFTitle', parent=styles['Heading1'], fontSize=24, textColor=BRAND_NAVY, fontName="Helvetica-Bold", spaceAfter=4
     )
-    meta_style = ParagraphStyle(
-        'PDFMeta', parent=styles['Normal'], fontSize=10, textColor=colors.gray, spaceAfter=6
+    subtitle_style = ParagraphStyle(
+        'PDFSubtitle', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor("#64748b"), fontName="Helvetica-Bold", spaceAfter=15, leading=14
+    )
+    meta_label_style = ParagraphStyle(
+        'PDFMetaLabel', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor("#475569"), fontName="Helvetica-Bold"
+    )
+    meta_value_style = ParagraphStyle(
+        'PDFMetaValue', parent=styles['Normal'], fontSize=9, textColor=TEXT_DARK, fontName="Helvetica"
+    )
+    section_heading = ParagraphStyle(
+        'PDFSection', parent=styles['Heading2'], fontSize=14, textColor=BRAND_NAVY, fontName="Helvetica-Bold", spaceBefore=15, spaceAfter=8
     )
     summary_style = ParagraphStyle(
-        'PDFSummary', parent=styles['Normal'], fontSize=11, textColor=colors.HexColor("#2C3E50"), backColor=colors.HexColor("#ECF0F1"), borderPadding=10, spaceAfter=20
+        'PDFSummary', parent=styles['Normal'], fontSize=10.5, textColor=colors.HexColor("#1e3a8a"), fontName="Helvetica", leading=15
     )
-    table_text_style = ParagraphStyle('TableText', parent=styles['Normal'], fontSize=9)
+    
+    # Table Header and Cell Styles
+    th_style = ParagraphStyle('TH', parent=styles['Normal'], fontSize=9.5, fontName="Helvetica-Bold", textColor=colors.whitesmoke)
+    td_style = ParagraphStyle('TD', parent=styles['Normal'], fontSize=9, fontName="Helvetica", textColor=TEXT_DARK, leading=12)
+    
+    # Specific styles for Danger Category labels
+    critical_style = ParagraphStyle('CriticalCell', parent=td_style, fontName="Helvetica-Bold", textColor=colors.HexColor("#dc2626"))
+    warning_style = ParagraphStyle('WarningCell', parent=td_style, fontName="Helvetica-Bold", textColor=colors.HexColor("#ea580c"))
 
-    # Appending UI Node Flowables Elements Elements
-    story.append(Paragraph("YAQIDH SYSTEM - INCIDENT SAFETY REPORT", title_style))
-    story.append(Paragraph(f"<b>Report ID:</b> {report.report_id}", meta_style))
-    story.append(Paragraph(f"<b>Generated On:</b> {report.generated_at.strftime('%Y-%m-%d %H:%M:%S')}", meta_style))
-    story.append(Paragraph(f"<b>Account Holder ID:</b> {report.user_id} ({current_user.role_name} Environment)", meta_style))
+    # Header section
+    story.append(Paragraph("YAQIDH SYSTEM", title_style))
+    story.append(Paragraph("SAFETY INCIDENT HISTORY REPORT", subtitle_style))
+    story.append(HRFlowable(width="100%", thickness=1.5, color=BRAND_NAVY, spaceAfter=15, spaceBefore=0))
+    
+    # Metadata Overview block (Structured Table)
+    meta_data = [
+        [Paragraph("Report ID:", meta_label_style), Paragraph(str(report.report_id), meta_value_style),
+         Paragraph("Generated On:", meta_label_style), Paragraph(report.generated_at.strftime('%Y-%m-%d %H:%M:%S'), meta_value_style)],
+        [Paragraph("Account Holder:", meta_label_style), Paragraph(str(report.user_id), meta_value_style),
+         Paragraph("Environment Context:", meta_label_style), Paragraph(f"{current_user.role_name} Session", meta_value_style)]
+    ]
+    meta_table = Table(meta_data, colWidths=[90, 176, 100, 166])
+    meta_table.setStyle(TableStyle([
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('TOPPADDING', (0,0), (-1,-1), 2),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+    ]))
+    story.append(meta_table)
     story.append(Spacer(1, 15))
     
-    story.append(Paragraph(f"<b>Executive Summary:</b> {report.report_summary}", summary_style))
-    story.append(Paragraph("Detailed Incidents Log:", styles['Heading2']))
-    story.append(Spacer(1, 8))
+    # Executive Summary Card layout block
+    story.append(Paragraph("Executive Summary", section_heading))
+    summary_text = f"<b>System Analytics Evaluation:</b> {report.report_summary}. All recorded logs have been double-checked and verified according to the system's active security settings."
+    summary_p = Paragraph(summary_text, summary_style)
+    summary_card = Table([[summary_p]], colWidths=[532])
+    summary_card.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#eff6ff")),
+        ('BOX', (0,0), (-1,-1), 1, colors.HexColor("#bfdbfe")),
+        ('TOPPADDING', (0,0), (-1,-1), 10),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+        ('LEFTPADDING', (0,0), (-1,-1), 12),
+        ('RIGHTPADDING', (0,0), (-1,-1), 12),
+    ]))
+    story.append(summary_card)
+    story.append(Spacer(1, 10))
+    
+    # Detailed Incidents Table Section
+    story.append(Paragraph("Incident History", section_heading))
+    
+    # Set up column structure based on Manager permissions (with or without 'Status')
+    if is_manager:
+        headers = ["Timestamp", "Zone", "Incident Type", "Category", "Status", "Confidence"]
+        col_widths = [105, 80, 100, 85, 82, 80] # Total 532
+    else:
+        headers = ["Timestamp", "Zone", "Incident Type", "Category", "Confidence"]
+        col_widths = [117, 100, 115, 100, 100] # Total 532
 
-    # Compile the layout framework data matrix structure grid
-    table_data = [["Timestamp", "Danger Category", "Incident Type", "Confidence"]]
+    table_data = [[Paragraph(h, th_style) for h in headers]]
     
     for inc in report.incidents:
         time_str = inc.timestamp.strftime('%Y-%m-%d %H:%M:%S')
-        table_data.append([
-            Paragraph(time_str, table_text_style),
-            Paragraph(str(inc.danger_category), table_text_style),
-            Paragraph(str(inc.incident_type), table_text_style),
-            Paragraph(f"{inc.confidence * 100:.1f}%", table_text_style)
-        ])
+        zone_str = inc.camera.zone.zone_name if (inc.camera and inc.camera.zone) else "Unknown Zone"
+        cat_raw = inc.danger_category.value if hasattr(inc.danger_category, 'value') else str(inc.danger_category)
+        
+        # Format Category cells with conditional styling
+        if cat_raw.lower() == "critical":
+            cat_p = Paragraph(cat_raw, critical_style)
+        elif cat_raw.lower() == "warning":
+            cat_p = Paragraph(cat_raw, warning_style)
+        else:
+            cat_p = Paragraph(cat_raw, td_style)
 
-    # Assign dynamic grid columns matching standard layout margins bounds (Total 500 Width units)
-    incidents_table = Table(table_data, colWidths=[125, 125, 150, 100])
+        row = [
+            Paragraph(time_str, td_style),
+            Paragraph(zone_str, td_style),
+            Paragraph(str(inc.incident_type), td_style),
+            cat_p,
+        ]
+        
+        if is_manager:
+            status_str = str(inc.status).capitalize() if inc.status else "Open"
+            row.append(Paragraph(status_str, td_style))
+            
+        # Append confidence metric cell
+        row.append(Paragraph(f"{inc.confidence * 100:.1f}%", td_style))
+        table_data.append(row)
+
+    # Style definitions for the dynamic logs grid data block
+    incidents_table = Table(table_data, colWidths=col_widths, repeatRows=1)
     incidents_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1A365D")),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('BACKGROUND', (0, 0), (-1, 0), BRAND_NAVY),
         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8F9FA")]),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#BDC3C7")),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, 0), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('TOPPADDING', (0, 1), (-1, -1), 7),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 7),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, BRAND_LIGHT_BG]),
+        ('LINEBELOW', (0, 0), (-1, -1), 0.5, BORDER_COLOR),
     ]))
     
     story.append(incidents_table)
@@ -290,7 +391,7 @@ async def delete_report(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Deletes a specific archived report record from the persistence database storage cluster.
+    Deletes a specific archived report record from the database.
     """
     result = await db.execute(select(Report).where(Report.report_id == report_id))
     report = result.scalar_one_or_none()
