@@ -1,0 +1,22 @@
+[33m34c861c[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{0}: pull origin main: Fast-forward
+[33m05648d2[m HEAD@{1}: reset: moving to HEAD
+[33m05648d2[m HEAD@{2}: commit: update email notification service and test script
+[33md9a0a62[m HEAD@{3}: pull origin main --no-edit: Merge made by the 'ort' strategy.
+[33m1de898a[m HEAD@{4}: reset: moving to HEAD
+[33m1de898a[m HEAD@{5}: reset: moving to HEAD
+[33m1de898a[m HEAD@{6}: commit: Add core email service and update notification implementation
+[33m6c9f333[m HEAD@{7}: commit: Save base config and notification setup before agent implementation
+[33mbae2f94[m HEAD@{8}: pull: Fast-forward
+[33m6adc132[m HEAD@{9}: pull: Fast-forward
+[33mc2d858d[m HEAD@{10}: pull: Fast-forward
+[33m0f2ffd0[m HEAD@{11}: rebase (finish): returning to refs/heads/main
+[33m0f2ffd0[m HEAD@{12}: rebase (pick): Update notification service to support role-based alerts
+[33m121288a[m HEAD@{13}: commit: Resolve gitignore conflicts
+[33m407507c[m HEAD@{14}: pull --rebase (start): checkout 407507c46fe657c57c03bffe457078a19b8636fb
+[33m4b226d9[m HEAD@{15}: rebase (abort): returning to refs/heads/main
+[33m407507c[m HEAD@{16}: pull --rebase (start): checkout 407507c46fe657c57c03bffe457078a19b8636fb
+[33m4b226d9[m HEAD@{17}: commit (merge): Merge branch 'main' of https://github.com/Yaqidh-Project/Yaqidh
+[33m8a40fa7[m HEAD@{18}: commit: Update notification service to support role-based alerts
+[33m18acb50[m HEAD@{19}: commit (merge): Resolve gitignore conflict
+[33m76d8412[m HEAD@{20}: commit: Update gitignore
+[33mcb6489e[m HEAD@{21}: clone: from https://github.com/Yaqidh-Project/Yaqidh.git
