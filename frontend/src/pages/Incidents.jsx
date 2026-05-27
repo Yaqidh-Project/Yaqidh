@@ -7,8 +7,7 @@ import {
   Eye,
   Download,
   CheckCircle2,
-  RefreshCw,
-  X
+  RefreshCw
 } from 'lucide-react';
 import axiosInstance from '../api/axiosInstance';
 
@@ -55,7 +54,7 @@ const IncidentCard = ({ incident, isTeacher, onViewDetails, onViewClip, onDownlo
           <span>{incident.time}</span>
         </div>
 
-        {!isTeacher && (
+        {incident.severity !== 'parent_view_disabled' && (
           <div className="flex items-center gap-1.5">
             <button
               onClick={(e) => {
@@ -112,7 +111,6 @@ export default function Incidents() {
   const [currentUserRole, setCurrentUserRole] = useState('manager');
   const [loading, setLoading] = useState(true);
 
-  // States to handle streaming video pipelines cleanly
   const [activeVideoUrl, setActiveVideoUrl] = useState(null);
   const [videoModalOpen, setVideoModalOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -134,7 +132,7 @@ export default function Incidents() {
           id: item.incident_id,
           type: item.incident_type,
           severity: item.danger_category?.toLowerCase() === 'critical' ? 'critical' : 'warning',
-          location: item.zone_name || 'Unknown Zone',
+          location: item.camera?.zone?.zone_name || 'Unknown Zone',
           time: new Date(item.timestamp).toLocaleString(),
           relativeTime: item.status === 'resolved' ? 'Archived Log' : 'Active Alert',
           status: item.status?.toLowerCase() || 'active'
@@ -151,22 +149,19 @@ export default function Incidents() {
   const handleResolveIncident = (incidentId) => {
     axiosInstance.patch(`/incidents/${incidentId}`, { status: 'resolved' })
       .then(() => {
-        setIncidents(prev => prev.map(inc => inc.id === incidentId ? { ...inc, status: 'resolved' } : inc));
+        setIncidents(prev => prev.map(inc => inc.id === incidentId ? { ...inc, status: 'resolved', relativeTime: 'Archived Log' } : inc));
       })
       .catch(err => console.error("Database update error context logic:", err));
   };
 
-  // ── Updated: Point video components to byte range streaming streams ─────
   const handleViewClip = async (incident) => {
     setActionLoading(true);
     try {
       const baseURL = axiosInstance.defaults.baseURL || 'http://localhost:8000/yaqidh-api';
       let streamUrl = `${baseURL}/clips/${incident.id}`;
 
-      // 1. Try to get plain token string
       let token = localStorage.getItem('token') || sessionStorage.getItem('token');
 
-      // 2. Fallback: If token lives inside the 'user' object, extract it safely
       if (!token) {
         const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
         if (storedUser) {
@@ -177,8 +172,6 @@ export default function Incidents() {
 
       if (token) {
         streamUrl += `?token=${encodeURIComponent(token)}`;
-      } else {
-        console.warn("Yaqidh Auth Check: No access token found in browser storage objects.");
       }
 
       setActiveVideoUrl(streamUrl);
@@ -191,7 +184,6 @@ export default function Incidents() {
     }
   };
 
-  // ── Download clip cleanly via blob creation ──────────────────────────────
   const handleDownloadClip = async (incident) => {
     setActionLoading(true);
     try {
@@ -216,15 +208,11 @@ export default function Incidents() {
     }
   };
 
-  // Direct cleanup reset — no native object url revocations needed
-  const closeVideoModal = () => {
-    setVideoModalOpen(false);
-    setActiveVideoUrl(null);
-  };
-
   const activeSevere = incidents.filter(i => i.status !== 'resolved' && i.severity === 'critical').length;
   const activeWarnings = incidents.filter(i => i.status !== 'resolved' && i.severity === 'warning').length;
-  const isTeacher = currentUserRole === 'teacher';
+
+  // Updated Rule boundary: Managers and teachers can mark resolved.
+  const isTeacherOrManager = currentUserRole === 'teacher' || currentUserRole === 'manager';
 
   if (loading) {
     return (
@@ -236,7 +224,6 @@ export default function Incidents() {
 
   return (
     <div className="space-y-6 p-4 relative">
-      {/* Loading Overlay for Clip Processing */}
       {actionLoading && (
         <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-50 flex items-center justify-center text-white font-semibold gap-2">
           <RefreshCw className="animate-spin" size={20} /> Loading Secure Video Resource...
@@ -266,49 +253,24 @@ export default function Incidents() {
         </div>
       </div>
 
-      {incidents.length === 0 ? (
-        <div className="text-center py-20 text-slate-400 text-sm font-mono uppercase bg-white rounded-3xl border border-dashed border-slate-100 p-8 shadow-sm">
-          ✅ No safety incidents logged inside database pipeline repository.
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {incidents.map(incident => (
-            <IncidentCard
-              key={incident.id}
-              incident={incident}
-              isTeacher={isTeacher}
-              onViewDetails={setSelectedIncident}
-              onViewClip={handleViewClip}
-              onDownloadClip={handleDownloadClip}
-              onResolveIncident={handleResolveIncident}
-            />
-          ))}
-        </div>
-      )}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+        {incidents.map((incident) => (
+          <IncidentCard
+            key={incident.id}
+            incident={incident}
+            isTeacher={isTeacherOrManager}
+            onViewDetails={setSelectedIncident}
+            onViewClip={handleViewClip}
+            onDownloadClip={handleDownloadClip}
+            onResolveIncident={handleResolveIncident}
+          />
+        ))}
+      </div>
 
-      {/* Modern Floating Modal for Video Streaming */}
-      {videoModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-3xl overflow-hidden shadow-2xl max-w-2xl w-100 border border-slate-800 relative">
-            <div className="p-4 bg-slate-800 flex justify-between items-center text-white">
-              <h4 className="font-semibold text-sm tracking-wide">Yaqidh Security Clip Playback</h4>
-              <button
-                onClick={closeVideoModal}
-                className="p-1 rounded-lg hover:bg-slate-700 transition-colors text-slate-400 hover:text-white"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="p-2 bg-black flex justify-center">
-              <video
-                src={activeVideoUrl}
-                controls
-                autoPlay
-                className="w-full rounded-xl max-h-[400px] bg-black"
-                crossOrigin="use-credentials"
-              />
-            </div>
-          </div>
+      {incidents.length === 0 && (
+        <div className="text-center py-10 text-slate-400">
+          <AlertCircle size={48} className="mx-auto mb-3 opacity-20" />
+          <p>No active or logged incidents found.</p>
         </div>
       )}
     </div>

@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useCamera } from '../context/CameraContext'; 
-import { 
-  ShieldCheck, 
-  AlertOctagon, 
-  AlertTriangle, 
-  CheckCircle, 
-  Info, 
+import { useCamera } from '../context/CameraContext';
+import {
+  ShieldCheck,
+  AlertOctagon,
+  AlertTriangle,
   Clock,
   Filter,
   Users,
@@ -26,11 +24,10 @@ const StatCard = ({ title, value, icon: Icon, color }) => (
   </div>
 );
 
-// Build the human-readable event detail message based on type and severity
 function buildEventMessage(incident) {
   const type = (incident.incident_type || '').toLowerCase();
   const category = (incident.danger_category || '').toLowerCase();
-  const zone = incident.zone_name || 'unknown zone';
+  const zone = incident.camera?.zone?.zone_name || 'unknown zone';
 
   const isFall = type.includes('fall');
   const isViolence = type.includes('violen') || type.includes('fight') || type.includes('physical');
@@ -45,7 +42,6 @@ function buildEventMessage(incident) {
     if (isFall) return `Possible fall behaviour detected in ${zone}`;
   }
 
-  // Fallback
   return `Event recorded in ${zone}`;
 }
 
@@ -54,21 +50,18 @@ export default function Dashboard() {
   const [activeFilter, setActiveFilter] = useState('all');
   const [userName, setUserName] = useState('');
   const [userRole, setUserRole] = useState('User');
-  const [activeCameras, setActiveCameras] = useState('0/0'); 
+  const [activeCameras, setActiveCameras] = useState('0/0');
   const [recentActivity, setRecentActivity] = useState([]);
   const [performanceData, setPerformanceData] = useState(null);
   const [isLoadingPerformance, setIsLoadingPerformance] = useState(false);
-  
-  // DYNAMIC CAMERA METRICS MATRIX: Tracks structural registration limits across multi-tenant scopes
   const [totalCameras, setTotalCameras] = useState(0);
 
   useEffect(() => {
-    // Get role from login response in localStorage
     let role = 'manager';
     try {
       const auth = JSON.parse(localStorage.getItem('user'));
       if (auth?.role) role = auth.role.toLowerCase();
-    } catch (e) {}
+    } catch (e) { }
 
     const roleNames = {
       manager: 'Nursery Manager',
@@ -77,30 +70,20 @@ export default function Dashboard() {
     };
     setUserRole(roleNames[role] || 'User');
 
-    // Fetch full_name from /users/me
     axiosInstance.get('/users/me')
       .then(res => {
         if (res.data?.full_name) setUserName(res.data.full_name);
       })
-      .catch(err => {
-        console.error('Error loading user profile:', err);
-      });
+      .catch(err => console.error('Error loading user profile:', err));
 
-    // INTEGRATED PERSISTENT BACKGROUND HARDWARE COUNTER MATRIX
-    // Queries database structures first to read factual total registration counts dynamically
     axiosInstance.get('/cameras')
       .then(res => {
-        const cameras = res.data;
-        const total = cameras.length;
-        
-        // Cache total to localized context memory to guard fallback streams
+        const total = res.data.length;
         setTotalCameras(total);
         setActiveCameras(`${activeCount}/${total}`);
       })
       .catch(err => {
         console.error('Error loading cameras count loop metrics:', err);
-        
-        // FALLBACK PROTECTION: Pulls from structural total state instead of guessing hardcoded integers
         setActiveCameras(`${activeCount}/${totalCameras || '—'}`);
       });
 
@@ -128,21 +111,18 @@ export default function Dashboard() {
         }));
         setRecentActivity(mappedActivities);
       })
-      .catch(err => {
-        console.error("Error loading incidents flow:", err);
-      });
+      .catch(err => console.error("Error loading incidents flow:", err));
 
-  }, [activeCount, totalCameras]); // BOUND TO PERSISTENT COUNT STREAM LISTENERS
+  }, [activeCount, totalCameras]);
 
-  const filteredActivity = activeFilter === 'all' 
-    ? recentActivity 
+  const filteredActivity = activeFilter === 'all'
+    ? recentActivity
     : recentActivity.filter(item => item.type === activeFilter);
 
   const getAlertStyle = (type) => {
-    switch(type) {
+    switch (type) {
       case 'critical': return 'bg-red-50 text-red-600 border-red-100';
       case 'warning': return 'bg-orange-50 text-orange-600 border-orange-100';
-      case 'success': return 'bg-green-50 text-green-600 border-green-100';
       default: return 'bg-blue-50 text-blue-600 border-blue-100';
     }
   };
@@ -173,11 +153,11 @@ export default function Dashboard() {
         />
         <StatCard title="Today's Incidents" value={filteredActivity.length} icon={AlertOctagon} color="bg-rose-500" />
         {userRole === 'Nursery Manager' && (
-          <StatCard 
-            title="Avg Response Time" 
-            value={performanceData ? formatResponseTime(performanceData.summary.nursery_average_response_time_seconds) : 'Loading...'} 
-            icon={TrendingUp} 
-            color="bg-indigo-500" 
+          <StatCard
+            title="Avg Response Time"
+            value={performanceData ? formatResponseTime(performanceData.summary.nursery_average_response_time_seconds) : 'Loading...'}
+            icon={TrendingUp}
+            color="bg-indigo-500"
           />
         )}
       </div>
@@ -208,11 +188,10 @@ export default function Dashboard() {
                         Assigned Teacher(s): <span className="font-medium text-slate-700">{zone.assigned_teachers?.join(', ') || 'Unassigned'}</span>
                       </p>
                     </div>
-                    <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${
-                      !zone.average_response_time_seconds ? 'bg-slate-200 text-slate-600' :
-                      zone.average_response_time_seconds <= 60 ? 'bg-emerald-100 text-emerald-800' : 
-                      zone.average_response_time_seconds <= 300 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
-                    }`}>
+                    <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${!zone.average_response_time_seconds ? 'bg-slate-200 text-slate-600' :
+                        zone.average_response_time_seconds <= 60 ? 'bg-emerald-100 text-emerald-800' :
+                          zone.average_response_time_seconds <= 300 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                      }`}>
                       Avg Delay: {formatResponseTime(zone.average_response_time_seconds)}
                     </span>
                   </div>
@@ -235,7 +214,7 @@ export default function Dashboard() {
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
           <h3 className="font-bold text-slate-800">Recent System Activity</h3>
-          
+
           <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-100">
             {[
               { id: 'all', label: 'All', color: 'bg-white text-slate-700 shadow-sm' },
@@ -245,11 +224,10 @@ export default function Dashboard() {
               <button
                 key={filter.id}
                 onClick={() => setActiveFilter(filter.id)}
-                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ease-in-out ${
-                  activeFilter === filter.id 
-                    ? `${filter.color} shadow-sm scale-105` 
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ease-in-out ${activeFilter === filter.id
+                    ? `${filter.color} shadow-sm scale-105`
                     : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
-                }`}
+                  }`}
               >
                 {filter.label}
               </button>
@@ -260,8 +238,8 @@ export default function Dashboard() {
         <div className="space-y-4">
           {filteredActivity.length > 0 ? (
             filteredActivity.map((activity) => (
-              <div 
-                key={activity.id} 
+              <div
+                key={activity.id}
                 className="flex items-start p-4 rounded-xl bg-slate-50 border border-slate-100 hover:bg-white hover:shadow-md transition-all duration-200 group"
               >
                 <div className={`p-3 rounded-lg border ${getAlertStyle(activity.type)} mr-4 group-hover:scale-110 transition-transform`}>
