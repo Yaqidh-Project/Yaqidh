@@ -7,13 +7,13 @@ const CameraFeed = ({ id, name, index }) => {
   const [time, setTime] = useState(new Date().toLocaleTimeString());
   const videoRef = useRef(null);
 
-  const { 
-    streamingStates, 
-    analyzingStates, 
-    liveAlerts, 
-    streamsRef, 
-    startCameraPipeline, 
-    stopCameraPipeline 
+  const {
+    streamingStates,
+    analyzingStates,
+    liveAlerts,
+    streamsRef,
+    startCameraPipeline,
+    stopCameraPipeline
   } = useCamera();
 
   const isStreaming = streamingStates[id] || false;
@@ -76,7 +76,7 @@ const CameraFeed = ({ id, name, index }) => {
               <CameraOff size={32} className="opacity-20" />
             </div>
             <p className="text-xs font-mono tracking-tighter opacity-50 uppercase">System Armed // Stream Offline</p>
-            <button 
+            <button
               onClick={handleToggleWebcam}
               className="mt-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-emerald-900/20"
             >
@@ -88,9 +88,9 @@ const CameraFeed = ({ id, name, index }) => {
         {isStreaming && (
           <>
             <div className="absolute top-4 right-4 z-20">
-               <button className="p-2 rounded-md bg-black/40 hover:bg-black/60 text-white/80 transition-colors">
-                 <Maximize2 size={14} />
-               </button>
+              <button className="p-2 rounded-md bg-black/40 hover:bg-black/60 text-white/80 transition-colors">
+                <Maximize2 size={14} />
+              </button>
             </div>
             <div className="absolute bottom-4 right-4 font-mono text-[10px] text-white/80 bg-black/40 px-2 py-1 rounded backdrop-blur-sm border border-white/10">
               {new Date().toLocaleDateString()} {time}
@@ -106,11 +106,10 @@ const CameraFeed = ({ id, name, index }) => {
       <div className="p-4 bg-white border-t border-slate-100">
         <div className="flex justify-between items-center gap-4">
           <h4 className="text-lg font-bold text-slate-900 truncate">{name}</h4>
-          <button 
+          <button
             onClick={handleToggleWebcam}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
-              isStreaming ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-slate-900 text-white hover:bg-slate-800'
-            }`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${isStreaming ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-slate-900 text-white hover:bg-slate-800'
+              }`}
           >
             {isStreaming ? <><CameraOff size={14} /> Terminate</> : <><Camera size={14} /> Power On</>}
           </button>
@@ -122,16 +121,20 @@ const CameraFeed = ({ id, name, index }) => {
 
 export default function LiveMonitoring() {
   const [cameras, setCameras] = useState([]);
-  const [viewMode, setViewMode] = useState('all'); 
+  const [viewMode, setViewMode] = useState('all');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    axiosInstance.get('/cameras') 
+    axiosInstance.get('/cameras')
       .then(response => {
-        const formattedCameras = response.data.map(cam => ({
-          id: cam.camera_id,
-          name: cam.name || cam.camera_name || 'Active Room Feed'
-        }));
+        const formattedCameras = response.data.map(cam => {
+          const dbZoneName = cam.zone?.zone_name || cam.zone_name;
+          const baseName = cam.name || cam.camera_name || 'Active Feed';
+          return {
+            id: cam.camera_id,
+            name: dbZoneName ? `${baseName} (${dbZoneName})` : baseName
+          };
+        });
         setCameras(formattedCameras);
         setLoading(false);
       })
@@ -159,14 +162,13 @@ export default function LiveMonitoring() {
           </div>
           <h2 className="text-4xl font-black text-slate-900 tracking-tight">Live Camera Panel</h2>
         </div>
-        
+
         {cameras.length > 1 && (
           <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm flex-wrap">
             <button
               onClick={() => setViewMode('all')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                viewMode === 'all' ? 'bg-brand-500 text-white shadow-md' : 'text-slate-600 hover:bg-slate-50'
-              }`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${viewMode === 'all' ? 'bg-brand-500 text-white shadow-md' : 'text-slate-600 hover:bg-slate-50'
+                }`}
             >
               <LayoutGrid size={16} /> Split View ({cameras.length})
             </button>
@@ -174,9 +176,8 @@ export default function LiveMonitoring() {
               <button
                 key={cam.id}
                 onClick={() => setViewMode(cam.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                  viewMode === cam.id ? 'bg-brand-500 text-white shadow-md' : 'text-slate-600 hover:bg-slate-50'
-                }`}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${viewMode === cam.id ? 'bg-brand-500 text-white shadow-md' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
               >
                 <Square size={16} /> {cam.name}
               </button>
@@ -191,9 +192,8 @@ export default function LiveMonitoring() {
             ⚠️ No active cameras registered.
           </div>
         ) : (
-          <div className={`grid gap-8 transition-all duration-500 ${
-            viewMode === 'all' && cameras.length > 1 ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1 max-w-4xl mx-auto'
-          }`}>
+          <div className={`grid gap-8 transition-all duration-500 ${viewMode === 'all' && cameras.length > 1 ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1 max-w-4xl mx-auto'
+            }`}>
             {cameras
               .filter(cam => viewMode === 'all' || viewMode === cam.id)
               .map((cam, idx) => (
