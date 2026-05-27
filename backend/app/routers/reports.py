@@ -99,7 +99,7 @@ async def generate_report(
 @router.get("", response_model=list[ReportOut])
 async def list_reports(
     skip: int = 0,
-    limit: int = 50,
+    limit: int = 1000,  # FIX: Increased limit from 50 to 1000 to allow full retrieval of compiled reports historical archives
     current_user: User = Depends(require_roles(*ALLOWED_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):

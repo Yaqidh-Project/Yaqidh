@@ -25,7 +25,6 @@ const CameraFeed = ({ id, name, index }) => {
     return () => clearInterval(timer);
   }, []);
 
-  // AUTOMATIC RE-BIND: If Aliyah re-enters the page, attach the running background stream directly to the video element
   useEffect(() => {
     if (isStreaming && videoRef.current && streamsRef.current[id]) {
       videoRef.current.srcObject = streamsRef.current[id];
