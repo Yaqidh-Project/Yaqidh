@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Bell, Camera, Users, Upload, Plus, Edit2, Trash2, RefreshCw, MapPin } from 'lucide-react';
+import { User, Bell, Camera, Users, Plus, Edit2, Trash2, RefreshCw, MapPin } from 'lucide-react';
 import axiosInstance from '../api/axiosInstance';
 
 const TabButton = ({ tab, activeTab, onClick, label }) => (
@@ -19,33 +19,35 @@ const EditProfile = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    axiosInstance.get('/users/me')
-      .then(res => {
+    axiosInstance
+      .get('/users/me')
+      .then((res) => {
         setProfileData({
           name: res.data.full_name || '',
           email: res.data.email || '',
-          phone: res.data.phone_number || ''
+          phone: res.data.phone_number || '',
         });
         setLoading(false);
       })
-      .catch(err => {
-        console.error("Error loading account profiles:", err);
+      .catch((err) => {
+        console.error('Error loading account profiles:', err);
         setLoading(false);
       });
   }, []);
 
   const handleProfileChange = (e) => {
     const { name, value } = e.target;
-    setProfileData(prev => ({ ...prev, [name]: value }));
+    setProfileData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSave = () => {
-    axiosInstance.patch('/users/me', {
-      full_name: profileData.name,
-      phone_number: profileData.phone
-    })
-    .then(() => alert("Profile information securely committed."))
-    .catch(err => console.error("Failed to commit profile updates:", err));
+    axiosInstance
+      .patch('/users/me', {
+        full_name: profileData.name,
+        phone_number: profileData.phone,
+      })
+      .then(() => alert('Profile information securely committed.'))
+      .catch((err) => console.error('Failed to commit profile updates:', err));
   };
 
   if (loading) return <div className="text-slate-400 font-mono text-xs py-4">LOADING ACCOUNT INFORMATION...</div>;
@@ -86,7 +88,10 @@ const EditProfile = () => {
             />
           </div>
         </div>
-        <button onClick={handleSave} className="mt-6 w-full bg-brand-500 hover:bg-brand-600 text-white font-semibold py-3 rounded-xl transition">
+        <button
+          onClick={handleSave}
+          className="mt-6 w-full bg-brand-500 hover:bg-brand-600 text-white font-semibold py-3 rounded-xl transition"
+        >
           Save Changes
         </button>
       </div>
@@ -99,7 +104,7 @@ const NotificationsTab = () => {
   const [notifications, setNotifications] = useState({ email: true, app: true });
 
   const toggleNotification = (key) => {
-    setNotifications(prev => ({ ...prev, [key]: !prev[key] }));
+    setNotifications((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   return (
@@ -121,7 +126,6 @@ const NotificationsTab = () => {
               {notifications.email ? 'On' : 'Off'}
             </button>
           </div>
-
         </div>
       </div>
     </div>
@@ -138,12 +142,21 @@ const ManageZones = () => {
 
   const fetchZones = () => {
     setLoading(true);
-    axiosInstance.get('/zones')
-      .then(res => { setZones(res.data); setLoading(false); })
-      .catch(err => { console.error("Failed to load zones:", err); setLoading(false); });
+    axiosInstance
+      .get('/zones')
+      .then((res) => {
+        setZones(res.data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error('Failed to load zones:', err);
+        setLoading(false);
+      });
   };
 
-  useEffect(() => { fetchZones(); }, []);
+  useEffect(() => {
+    fetchZones();
+  }, []);
 
   const resetForm = () => {
     setFormData({ zone_name: '', description: '' });
@@ -152,13 +165,14 @@ const ManageZones = () => {
   };
 
   const handleSave = () => {
-    if (!formData.zone_name.trim()) return alert("Zone name is required.");
-    const request = editingId
-      ? axiosInstance.patch(`/zones/${editingId}`, formData)
-      : axiosInstance.post('/zones', formData);
+    if (!formData.zone_name.trim()) return alert('Zone name is required.');
+    const request = editingId ? axiosInstance.patch(`/zones/${editingId}`, formData) : axiosInstance.post('/zones', formData);
     request
-      .then(() => { fetchZones(); resetForm(); })
-      .catch(err => console.error("Failed to save zone:", err));
+      .then(() => {
+        fetchZones();
+        resetForm();
+      })
+      .catch((err) => console.error('Failed to save zone:', err));
   };
 
   const handleEdit = (zone) => {
@@ -168,10 +182,11 @@ const ManageZones = () => {
   };
 
   const handleDelete = (id) => {
-    if (window.confirm("Delete this zone? Cameras assigned to it will be unassigned.")) {
-      axiosInstance.delete(`/zones/${id}`)
+    if (window.confirm('Delete this zone? Cameras assigned to it will be unassigned.')) {
+      axiosInstance
+        .delete(`/zones/${id}`)
         .then(() => fetchZones())
-        .catch(err => console.error("Failed to delete zone:", err));
+        .catch((err) => console.error('Failed to delete zone:', err));
     }
   };
 
@@ -183,7 +198,10 @@ const ManageZones = () => {
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-slate-800">Monitored Zones</h3>
           <button
-            onClick={() => { resetForm(); setShowForm(!showForm); }}
+            onClick={() => {
+              resetForm();
+              setShowForm(!showForm);
+            }}
             className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-medium transition flex items-center gap-2 text-sm"
           >
             <Plus size={18} /> Add Zone
@@ -206,7 +224,9 @@ const ManageZones = () => {
               className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
             />
             <div className="flex gap-2 justify-end text-sm">
-              <button onClick={resetForm} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl font-medium">Cancel</button>
+              <button onClick={resetForm} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl font-medium">
+                Cancel
+              </button>
               <button onClick={handleSave} className="px-4 py-2 bg-brand-500 text-white rounded-xl font-medium">
                 {editingId ? 'Save Changes' : 'Add Zone'}
               </button>
@@ -221,8 +241,11 @@ const ManageZones = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {zones.map(zone => (
-              <div key={zone.zone_id} className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 flex flex-col justify-between hover:border-slate-200 transition">
+            {zones.map((zone) => (
+              <div
+                key={zone.zone_id}
+                className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 flex flex-col justify-between hover:border-slate-200 transition"
+              >
                 <div className="flex items-start gap-3 mb-4">
                   <div className="p-2 bg-brand-50 rounded-lg mt-0.5">
                     <MapPin size={16} className="text-brand-500" />
@@ -272,67 +295,79 @@ const ManageCameras = ({ role }) => {
         setZones(zoneRes.data);
         setLoading(false);
       })
-      .catch(err => { console.error("Failed to load cameras:", err); setLoading(false); });
+      .catch((err) => {
+        console.error('Failed to load cameras:', err);
+        setLoading(false);
+      });
   };
 
-  useEffect(() => { fetchCamerasAndZones(); }, []);
+  useEffect(() => {
+    fetchCamerasAndZones();
+  }, []);
 
-  // Compare as strings — zone_id is a UUID in this database
   const getZoneName = (zoneId) => {
     if (zoneId === null || zoneId === undefined || zoneId === '') return null;
-    const match = zones.find(z => String(z.zone_id).trim() === String(zoneId).trim());
+    const match = zones.find((z) => String(z.zone_id).trim() === String(zoneId).trim());
     return match ? match.zone_name : null;
   };
 
   const handleAddCamera = () => {
     if (!formData.name.trim() || !formData.ip.trim() || !formData.stream_url.trim()) {
-      return alert("Camera name, IP address, and Stream URL are required.");
+      return alert('Camera name, IP address, and Stream URL are required.');
     }
-    const sanitizedZoneId = formData.zone_id === '' ? null : formData.zone_id;
+    if (!formData.zone_id) {
+      return alert('You must select a zone for this camera.');
+    }
 
     if (editingId) {
-      axiosInstance.patch(`/cameras/${editingId}`, {
-        camera_name: formData.name,
-        ip_address: formData.ip,
-        stream_url: formData.stream_url,
-        zone_id: sanitizedZoneId
-      })
-      .then(() => {
-        fetchCamerasAndZones();
-        setShowForm(false);
-        setEditingId(null);
-        setFormData({ name: '', ip: '', stream_url: '', zone_id: '', status: 'Online' });
-      })
-      .catch(err => {
-        console.error("Failed to patch camera:", err.response?.data?.detail || err.message);
-        alert("Unable to save edits: " + JSON.stringify(err.response?.data?.detail || "Schema mismatch"));
-      });
+      axiosInstance
+        .patch(`/cameras/${editingId}`, {
+          camera_name: formData.name,
+          ip_address: formData.ip,
+          stream_url: formData.stream_url,
+          zone_id: formData.zone_id,
+        })
+        .then(() => {
+          fetchCamerasAndZones();
+          setShowForm(false);
+          setEditingId(null);
+          setFormData({ name: '', ip: '', stream_url: '', zone_id: '', status: 'Online' });
+        })
+        .catch((err) => {
+          console.error('Failed to patch camera:', err.response?.data?.detail || err.message);
+          alert('Unable to save edits: ' + JSON.stringify(err.response?.data?.detail || 'Schema mismatch'));
+        });
     } else {
-      axiosInstance.post('/cameras', {
-        camera_name: formData.name,
-        ip_address: formData.ip,
-        stream_url: formData.stream_url,
-        zone_id: sanitizedZoneId
-      })
-      .then(() => {
-        fetchCamerasAndZones();
-        setShowForm(false);
-        setFormData({ name: '', ip: '', stream_url: '', zone_id: '', status: 'Online' });
-      })
-      .catch(err => {
-        console.error("FastAPI Validation Detail:", err.response?.data?.detail || err.message);
-        alert("Failed adding camera: " + JSON.stringify(err.response?.data?.detail || "Check entity parameters"));
-      });
-    }
-  };
-
-  const handleDelete = (id) => {
-    if (window.confirm("Delete this camera?")) {
-      axiosInstance.delete(`/cameras/${id}`).then(() => fetchCamerasAndZones());
+      axiosInstance
+        .post('/cameras', {
+          camera_name: formData.name,
+          ip_address: formData.ip,
+          stream_url: formData.stream_url,
+          zone_id: formData.zone_id,
+        })
+        .then(() => {
+          fetchCamerasAndZones();
+          setShowForm(false);
+          setFormData({ name: '', ip: '', stream_url: '', zone_id: '', status: 'Online' });
+        })
+        .catch((err) => {
+          console.error('FastAPI Validation Detail:', err.response?.data?.detail || err.message);
+          alert('Failed adding camera: ' + JSON.stringify(err.response?.data?.detail || 'Check entity parameters'));
+        });
     }
   };
 
   if (loading) return <div className="text-slate-400 font-mono text-xs py-4">LOADING CAMERAS...</div>;
+
+  // Block the tab if there are no zones
+  if (!loading && zones.length === 0) {
+    return (
+      <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl p-6 text-sm">
+        <p className="font-semibold mb-1">No zones available.</p>
+        <p>Please add a zone before creating cameras.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -376,9 +411,14 @@ const ManageCameras = ({ role }) => {
               value={formData.zone_id}
               onChange={(e) => setFormData({ ...formData, zone_id: e.target.value })}
               className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
+              required
             >
-              <option value="">Select Zone (Optional)</option>
-              {zones.map(z => <option key={z.zone_id} value={z.zone_id}>{z.zone_name}</option>)}
+              <option value="">Select Zone</option>
+              {zones.map((z) => (
+                <option key={z.zone_id} value={z.zone_id}>
+                  {z.zone_name}
+                </option>
+              ))}
             </select>
             <div className="flex gap-2 justify-end text-sm">
               <button
@@ -391,7 +431,10 @@ const ManageCameras = ({ role }) => {
               >
                 Cancel
               </button>
-              <button onClick={handleAddCamera} className="px-4 py-2 bg-brand-500 text-white rounded-xl font-medium hover:bg-brand-600 transition">
+              <button
+                onClick={handleAddCamera}
+                className="px-4 py-2 bg-brand-500 text-white rounded-xl font-medium hover:bg-brand-600 transition"
+              >
                 {editingId ? 'Save' : 'Add'}
               </button>
             </div>
@@ -405,8 +448,11 @@ const ManageCameras = ({ role }) => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {cameras.map(camera => (
-              <div key={camera.camera_id} className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 flex flex-col justify-between hover:border-slate-200 transition">
+            {cameras.map((camera) => (
+              <div
+                key={camera.camera_id}
+                className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 flex flex-col justify-between hover:border-slate-200 transition"
+              >
                 <div>
                   <h4 className="font-semibold text-slate-800 text-sm mb-2">{camera.camera_name}</h4>
                   <p className="text-xs text-slate-500">IP: {camera.ip_address}</p>
@@ -432,7 +478,7 @@ const ManageCameras = ({ role }) => {
                         ip: camera.ip_address,
                         stream_url: camera.stream_url || '',
                         zone_id: camera.zone_id ?? '',
-                        status: 'Online'
+                        status: 'Online',
                       });
                       setShowForm(true);
                     }}
@@ -441,7 +487,11 @@ const ManageCameras = ({ role }) => {
                     <Edit2 size={12} /> Edit
                   </button>
                   <button
-                    onClick={() => handleDelete(camera.camera_id)}
+                    onClick={() => {
+                      if (window.confirm('Delete this camera?')) {
+                        axiosInstance.delete(`/cameras/${camera.camera_id}`).then(() => fetchCamerasAndZones());
+                      }
+                    }}
                     className="flex-1 py-2 bg-red-50 text-red-600 rounded-lg text-xs flex justify-center items-center gap-1 hover:bg-red-100 transition"
                   >
                     <Trash2 size={12} /> Remove
@@ -472,60 +522,53 @@ const UserManagement = () => {
   const fetchData = () => {
     setLoading(true);
     setError(null);
-    Promise.all([
-      axiosInstance.get('/manager/teachers'),
-      axiosInstance.get('/zones'),
-      axiosInstance.get('/manager/performance-dashboard'),
-    ])
+    Promise.all([axiosInstance.get('/manager/teachers'), axiosInstance.get('/zones'), axiosInstance.get('/manager/performance-dashboard')])
       .then(([teachersRes, zonesRes, perfRes]) => {
         const list = Array.isArray(teachersRes.data)
           ? teachersRes.data
-          : (teachersRes.data?.data ?? teachersRes.data?.teachers ?? []);
+          : teachersRes.data?.data ?? teachersRes.data?.teachers ?? [];
         setUsers(list);
         setZones(Array.isArray(zonesRes.data) ? zonesRes.data : []);
 
-        // Build name->zone map from performance dashboard (same source Dashboard page uses)
         const map = {};
         const zonesPerf = perfRes.data?.zones_performance || [];
-        zonesPerf.forEach(zone => {
-          (zone.assigned_teachers || []).forEach(teacherName => {
+        zonesPerf.forEach((zone) => {
+          (zone.assigned_teachers || []).forEach((teacherName) => {
             map[teacherName.trim()] = zone.zone_name;
           });
         });
         setTeacherZoneMap(map);
         setLoading(false);
       })
-      .catch(err => {
-        console.error("Failed to load teachers:", err);
-        setError(err.response?.data?.detail || "Could not load teachers. Check your connection or permissions.");
+      .catch((err) => {
+        console.error('Failed to load teachers:', err);
+        setError(err.response?.data?.detail || 'Could not load teachers. Check your connection or permissions.');
         setLoading(false);
       });
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    fetchData();
+  }, []);
 
-  // Resolve zone name using multiple strategies in priority order
   const resolveZone = (u) => {
-    // Strategy 1: performance dashboard name map (most reliable)
     if (u.full_name && teacherZoneMap[u.full_name.trim()]) return teacherZoneMap[u.full_name.trim()];
-    // Strategy 2: nested zone object
     if (u.zone && u.zone.zone_name) return u.zone.zone_name;
-    // Strategy 3: zone_name directly on teacher object
     if (u.zone_name) return u.zone_name;
-    // Strategy 4: flat zone_id lookup (UUID — compare as strings)
     const zoneId = u.zone_id;
     if (zoneId === null || zoneId === undefined || zoneId === '') return null;
-    const match = zones.find(z => String(z.zone_id).trim() === String(zoneId).trim());
+    const match = zones.find((z) => String(z.zone_id).trim() === String(zoneId).trim());
     return match ? match.zone_name : null;
   };
 
   const handleDeleteUser = (userId, name) => {
     if (!window.confirm(`Remove ${name} from the system? This cannot be undone.`)) return;
-    axiosInstance.delete(`/users/${userId}`)
+    axiosInstance
+      .delete(`/users/${userId}`)
       .then(() => fetchData())
-      .catch(err => {
+      .catch((err) => {
         const detail = err.response?.data?.detail;
-        alert(typeof detail === 'string' ? detail : JSON.stringify(detail) || "Failed to remove teacher");
+        alert(typeof detail === 'string' ? detail : JSON.stringify(detail) || 'Failed to remove teacher');
       });
   };
 
@@ -541,40 +584,51 @@ const UserManagement = () => {
 
   const handleAddUser = () => {
     if (!formData.email.trim() || !formData.password.trim() || !formData.full_name.trim()) {
-      return alert("Full name, email, and password are required.");
+      return alert('Full name, email, and password are required.');
     }
     setSubmitting(true);
-    axiosInstance.post('/manager/create-teacher', {
-      email: formData.email.trim(),
-      password: formData.password,
-      full_name: formData.full_name.trim(),
-      phone_number: formData.phone_number.trim() || null,
-      zone_id: formData.zone_id || null,
-    })
-    .then(() => { fetchData(); handleCloseForm(); })
-    .catch(err => {
-      const detail = err.response?.data?.detail;
-      alert(typeof detail === 'string' ? detail : JSON.stringify(detail) || "Failed to add teacher");
-    })
-    .finally(() => setSubmitting(false));
+    axiosInstance
+      .post('/manager/create-teacher', {
+        email: formData.email.trim(),
+        password: formData.password,
+        full_name: formData.full_name.trim(),
+        phone_number: formData.phone_number.trim() || null,
+        zone_id: formData.zone_id || null,
+      })
+      .then(() => {
+        fetchData();
+        handleCloseForm();
+      })
+      .catch((err) => {
+        const detail = err.response?.data?.detail;
+        alert(typeof detail === 'string' ? detail : JSON.stringify(detail) || 'Failed to add teacher');
+      })
+      .finally(() => setSubmitting(false));
   };
 
   if (loading) return <div className="text-slate-400 font-mono text-xs py-4">LOADING TEACHERS...</div>;
 
-  if (error) return (
-    <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-6 text-sm space-y-3">
-      <p className="font-semibold">Failed to load teachers</p>
-      <p className="text-red-500">{error}</p>
-      <button onClick={fetchData} className="px-4 py-2 bg-red-100 hover:bg-red-200 rounded-xl text-red-700 font-medium flex items-center gap-2 transition">
-        <RefreshCw size={14} /> Retry
-      </button>
-    </div>
-  );
+  if (error)
+    return (
+      <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-6 text-sm space-y-3">
+        <p className="font-semibold">Failed to load teachers</p>
+        <p className="text-red-500">{error}</p>
+        <button
+          onClick={fetchData}
+          className="px-4 py-2 bg-red-100 hover:bg-red-200 rounded-xl text-red-700 font-medium flex items-center gap-2 transition"
+        >
+          <RefreshCw size={14} /> Retry
+        </button>
+      </div>
+    );
 
   return (
     <div className="space-y-6">
       <div className="flex justify-end">
-        <button onClick={handleOpenForm} className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-medium transition flex items-center gap-2">
+        <button
+          onClick={handleOpenForm}
+          className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-medium transition flex items-center gap-2"
+        >
           <Plus size={20} /> Add Teacher
         </button>
       </div>
@@ -619,8 +673,10 @@ const UserManagement = () => {
             className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
           >
             <option value="">Assign to Zone</option>
-            {zones.map(z => (
-              <option key={z.zone_id} value={z.zone_id}>{z.zone_name}</option>
+            {zones.map((z) => (
+              <option key={z.zone_id} value={z.zone_id}>
+                {z.zone_name}
+              </option>
             ))}
           </select>
           <div className="flex gap-2">
@@ -631,7 +687,9 @@ const UserManagement = () => {
             >
               {submitting ? 'Adding…' : 'Add Teacher'}
             </button>
-            <button onClick={handleCloseForm} className="px-4 py-2 bg-slate-200 rounded-xl text-slate-700 font-medium">Cancel</button>
+            <button onClick={handleCloseForm} className="px-4 py-2 bg-slate-200 rounded-xl text-slate-700 font-medium">
+              Cancel
+            </button>
           </div>
         </div>
       )}
@@ -655,7 +713,7 @@ const UserManagement = () => {
               </tr>
             </thead>
             <tbody>
-              {users.map(u => (
+              {users.map((u) => (
                 <tr key={u.user_id} className="border-b border-slate-100 text-slate-700 hover:bg-slate-50/50">
                   <td className="p-4 font-medium">{u.full_name || '—'}</td>
                   <td className="p-4 text-slate-500">{u.email || '—'}</td>
@@ -699,9 +757,10 @@ const PerformanceTab = () => {
   const [stats, setStats] = useState(null);
 
   useEffect(() => {
-    axiosInstance.get('/manager/performance-dashboard')
-      .then(res => setStats(res.data))
-      .catch(err => console.error("Failed to load analytics:", err));
+    axiosInstance
+      .get('/manager/performance-dashboard')
+      .then((res) => setStats(res.data))
+      .catch((err) => console.error('Failed to load analytics:', err));
   }, []);
 
   if (!stats) return <div className="text-slate-400 font-mono text-xs py-4">LOADING ANALYTICS...</div>;
@@ -744,7 +803,10 @@ const PerformanceTab = () => {
             </div>
           </div>
           <p className="text-xs text-slate-400 font-mono uppercase mt-6 pt-4 border-t border-slate-100">
-            Nursery Average: <span className="font-bold text-slate-700">{stats.summary?.nursery_average_response_time_seconds || 0}s</span>
+            Nursery Average:{' '}
+            <span className="font-bold text-slate-700">
+              {stats.summary?.nursery_average_response_time_seconds || 0}s
+            </span>
           </p>
         </div>
       </div>
@@ -762,19 +824,20 @@ export default function Settings() {
   const isParent = role === 'parent';
 
   const tabs = [
-    { key: 'profile',       label: 'Profile',            show: true },
-    { key: 'notifications', label: 'Notifications',       show: true },
-    { key: 'zones',         label: 'Zones',               show: isManager || isParent },
-    { key: 'cameras',       label: 'Cameras',             show: isManager || isParent },
-    { key: 'users',         label: 'Teacher Management',  show: isManager },
-    { key: 'performance',   label: 'Analytics',           show: isManager },
+    { key: 'profile', label: 'Profile', show: true },
+    { key: 'notifications', label: 'Notifications', show: true },
+    { key: 'zones', label: 'Zones', show: isManager || isParent },
+    { key: 'cameras', label: 'Cameras', show: isManager || isParent },
+    { key: 'users', label: 'Teacher Management', show: isManager },
+    { key: 'performance', label: 'Analytics', show: isManager },
   ];
 
   useEffect(() => {
-    if (!tabs.find(t => t.key === activeTab && t.show)) {
-      const firstAllowed = tabs.find(t => t.show);
+    if (!tabs.find((t) => t.key === activeTab && t.show)) {
+      const firstAllowed = tabs.find((t) => t.show);
       if (firstAllowed) setActiveTab(firstAllowed.key);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role]);
 
   return (
@@ -788,18 +851,20 @@ export default function Settings() {
       </header>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-3 flex flex-wrap gap-2">
-        {tabs.filter(t => t.show).map(tab => (
-          <TabButton key={tab.key} tab={tab.key} activeTab={activeTab} onClick={setActiveTab} label={tab.label} />
-        ))}
+        {tabs
+          .filter((t) => t.show)
+          .map((tab) => (
+            <TabButton key={tab.key} tab={tab.key} activeTab={activeTab} onClick={setActiveTab} label={tab.label} />
+          ))}
       </div>
 
       <div className="mt-4">
-        {activeTab === 'profile'       && <EditProfile />}
+        {activeTab === 'profile' && <EditProfile />}
         {activeTab === 'notifications' && <NotificationsTab />}
-        {activeTab === 'zones'         && (isManager || isParent) && <ManageZones />}
-        {activeTab === 'cameras'       && (isManager || isParent) && <ManageCameras role={role} />}
-        {activeTab === 'users'         && isManager && <UserManagement />}
-        {activeTab === 'performance'   && isManager && <PerformanceTab />}
+        {activeTab === 'zones' && (isManager || isParent) && <ManageZones />}
+        {activeTab === 'cameras' && (isManager || isParent) && <ManageCameras role={role} />}
+        {activeTab === 'users' && isManager && <UserManagement />}
+        {activeTab === 'performance' && isManager && <PerformanceTab />}
       </div>
     </div>
   );
