@@ -7,7 +7,8 @@ import {
   Eye,
   Download,
   CheckCircle2,
-  RefreshCw
+  RefreshCw,
+  X // Added for modal close icon functionality
 } from 'lucide-react';
 import axiosInstance from '../api/axiosInstance';
 
@@ -194,6 +195,7 @@ export default function Incidents() {
         streamUrl += `?token=${encodeURIComponent(token)}`;
       }
 
+      setSelectedIncident(incident); // Store current context item metadata
       setActiveVideoUrl(streamUrl);
       setVideoModalOpen(true);
     } catch (err) {
@@ -291,6 +293,60 @@ export default function Incidents() {
         <div className="text-center py-10 text-slate-400">
           <AlertCircle size={48} className="mx-auto mb-3 opacity-20" />
           <p>No active or logged incidents found.</p>
+        </div>
+      )}
+
+      {/* FIXED VISUAL MEDIA PLAYER OVERLAY MODAL */}
+      {videoModalOpen && activeVideoUrl && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-3xl rounded-3xl overflow-hidden shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+
+            {/* Modal Title Banner */}
+            <div className="bg-slate-900 px-6 py-4 flex justify-between items-center text-white">
+              <div>
+                <h3 className="font-bold text-base flex items-center gap-2">
+                  <span className={`w-2.5 h-2.5 rounded-full ${selectedIncident?.severity === 'critical' ? 'bg-red-500 animate-pulse' : 'bg-orange-500'}`}></span>
+                  {selectedIncident?.type || 'System Event Capture'}
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">{selectedIncident?.location} — {selectedIncident?.time}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setVideoModalOpen(false);
+                  setActiveVideoUrl(null);
+                }}
+                className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Native Streaming Player */}
+            <div className="bg-black aspect-video flex items-center justify-center relative">
+              <video
+                src={activeVideoUrl}
+                controls
+                autoPlay
+                className="w-full h-full object-contain"
+                controlsList="nodownload"
+              >
+                Your browser does not support the streaming video resource context layer.
+              </video>
+            </div>
+
+            {/* Modal Bottom Information Layout */}
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-xs text-slate-500">
+              <span>Secure streaming encrypted context session token active.</span>
+              <button
+                onClick={() => handleDownloadClip(selectedIncident)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 font-semibold text-white rounded-xl shadow-sm transition-colors"
+              >
+                <Download size={14} />
+                Download Copy
+              </button>
+            </div>
+
+          </div>
         </div>
       )}
     </div>
