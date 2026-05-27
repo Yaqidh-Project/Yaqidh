@@ -8,7 +8,7 @@ import {
   Download,
   CheckCircle2,
   RefreshCw,
-  X // Added for modal close icon functionality
+  X
 } from 'lucide-react';
 import axiosInstance from '../api/axiosInstance';
 
@@ -21,8 +21,9 @@ const IncidentCard = ({
   onDownloadClip,
   onResolveIncident
 }) => {
-  // Managers and teachers can always view media; parents are bound by visibility restrictions
-  const canViewMedia = userRole === 'manager' || userRole === 'teacher' || incident.severity !== 'parent_view_disabled';
+  // Teachers are explicitly blocked from media access. Managers have total access. 
+  // Parents are subject to standard structural context rules.
+  const canViewMedia = userRole === 'manager' || (userRole !== 'teacher' && incident.severity !== 'parent_view_disabled');
 
   return (
     <div
@@ -146,10 +147,7 @@ export default function Incidents() {
           id: item.incident_id,
           type: item.incident_type,
           severity: item.danger_category?.toLowerCase() === 'critical' ? 'critical' : 'warning',
-
-          // COMPREHENSIVE FALLBACK CHAIN: Handles flattened keys and nested ORM fields
           location: item.zone_name || item.camera?.zone?.zone_name || item.location || 'Unknown Zone',
-
           time: new Date(item.timestamp).toLocaleString(),
           relativeTime: item.status === 'resolved' ? 'Archived Log' : 'Active Alert',
           status: item.status?.toLowerCase() || 'active'
@@ -180,7 +178,6 @@ export default function Incidents() {
     try {
       const baseURL = axiosInstance.defaults.baseURL || 'http://localhost:8000/yaqidh-api';
       let streamUrl = `${baseURL}/clips/${incident.id}`;
-
       let token = localStorage.getItem('token') || sessionStorage.getItem('token');
 
       if (!token) {
@@ -195,14 +192,14 @@ export default function Incidents() {
         streamUrl += `?token=${encodeURIComponent(token)}`;
       }
 
-      setSelectedIncident(incident); // Store current context item metadata
+      setSelectedIncident(incident);
       setActiveVideoUrl(streamUrl);
       setVideoModalOpen(true);
     } catch (err) {
       alert("Failed to initialize system streaming resource.");
       console.error("Streaming error:", err);
     } finally {
-      setActionLoading(false);
+      actionLoading && setActionLoading(false);
     }
   };
 
@@ -296,12 +293,10 @@ export default function Incidents() {
         </div>
       )}
 
-      {/* FIXED VISUAL MEDIA PLAYER OVERLAY MODAL */}
       {videoModalOpen && activeVideoUrl && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-3xl rounded-3xl overflow-hidden shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
 
-            {/* Modal Title Banner */}
             <div className="bg-slate-900 px-6 py-4 flex justify-between items-center text-white">
               <div>
                 <h3 className="font-bold text-base flex items-center gap-2">
@@ -321,7 +316,6 @@ export default function Incidents() {
               </button>
             </div>
 
-            {/* Native Streaming Player */}
             <div className="bg-black aspect-video flex items-center justify-center relative">
               <video
                 src={activeVideoUrl}
@@ -334,16 +328,18 @@ export default function Incidents() {
               </video>
             </div>
 
-            {/* Modal Bottom Information Layout */}
             <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-xs text-slate-500">
               <span>Secure streaming encrypted context session token active.</span>
-              <button
-                onClick={() => handleDownloadClip(selectedIncident)}
-                className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 font-semibold text-white rounded-xl shadow-sm transition-colors"
-              >
-                <Download size={14} />
-                Download Copy
-              </button>
+              {/* Extra precaution: Prevent download button inside video overlay modal for teachers */}
+              {currentUserRole !== 'teacher' && (
+                <button
+                  onClick={() => handleDownloadClip(selectedIncident)}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 font-semibold text-white rounded-xl shadow-sm transition-colors"
+                >
+                  <Download size={14} />
+                  Download Copy
+                </button>
+              )}
             </div>
 
           </div>
