@@ -141,7 +141,8 @@ export default function Incidents() {
 
     setCurrentUserRole(role);
 
-    axiosInstance.get('/incidents')
+    // FIX: Appended ?limit=1000 parameter to bypass the default API pagination constraints and sync data counts
+    axiosInstance.get('/incidents?limit=1000')
       .then(response => {
         const mapped = response.data.map(item => ({
           id: item.incident_id,
@@ -199,7 +200,7 @@ export default function Incidents() {
       alert("Failed to initialize system streaming resource.");
       console.error("Streaming error:", err);
     } finally {
-      actionLoading && setActionLoading(false);
+      setActionLoading && setActionLoading(false);
     }
   };
 
@@ -330,7 +331,6 @@ export default function Incidents() {
 
             <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-xs text-slate-500">
               <span>Secure streaming encrypted context session token active.</span>
-              {/* Extra precaution: Prevent download button inside video overlay modal for teachers */}
               {currentUserRole !== 'teacher' && (
                 <button
                   onClick={() => handleDownloadClip(selectedIncident)}
