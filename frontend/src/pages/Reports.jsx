@@ -16,7 +16,6 @@ export default function Reports() {
   const [avgResponseTime, setAvgResponseTime] = useState('N/A');
 
   // --- Auth Role State ---
-  // Safely parse the 'user' object from localStorage to read the exact role attribute
   const [userRole, setUserRole] = useState(() => {
     try {
       const storedUser = localStorage.getItem('user');
@@ -49,14 +48,15 @@ export default function Reports() {
     const end = new Date(endStr);
     const diffMs = end - start;
     if (diffMs < 0) return 0;
-    return Math.round(diffMs / 1000 / 60); // Convert milliseconds to total minutes
+    return Math.round(diffMs / 1000 / 60); 
   };
 
   /**
    * Fetch initial unique cameras/zones to dynamically populate the zone filter dropdown options
    */
   useEffect(() => {
-    axiosInstance.get('/incidents')
+    // FIX: Added limit=1000 query parameter to fetch all incidents across available zones, bypassing default backend limit
+    axiosInstance.get('/incidents?limit=1000')
       .then(res => {
         const data = res.data || [];
         const uniqueCameras = [];
@@ -80,7 +80,8 @@ export default function Reports() {
    * Fetches and filters system analytics data to synchronously update charts, counters, and data logs
    */
   const fetchAnalyticsData = () => {
-    axiosInstance.get('/incidents')
+    // FIX: Added limit=1000 query parameter to retrieve the complete data stream for accurate UI metrics computation
+    axiosInstance.get('/incidents?limit=1000')
       .then(res => {
         let data = res.data || [];
 
@@ -358,7 +359,7 @@ export default function Reports() {
             </div>
           </div>
 
-          {/* MANAGER KPI INJECTION: Only render Total Average Response Time Card for Managers */}
+          {/* MANAGER KPI INJECTION */}
           {isManager && (
             <div className="bg-white px-8 py-6 border border-slate-200 w-full shadow-sm flex items-center justify-between">
               <div>
@@ -455,7 +456,7 @@ export default function Reports() {
                 <th className="py-3 px-4">Incident Type</th>
                 <th className="py-3 px-4">Category</th>
                 {isManager && <th className="py-3 px-4">Status</th>}
-                {isManager && <th className="py-3 px-4">Response Time</th>} {/* INDIVIDUAL INCIDENT COLUMN */}
+                {isManager && <th className="py-3 px-4">Response Time</th>}
                 <th className="py-3 px-4">Confidence</th>
               </tr>
             </thead>
@@ -469,8 +470,6 @@ export default function Reports() {
               ) : (
                 incidentsList.map((inc) => {
                   const catRaw = inc.danger_category || '';
-                  
-                  // Calculate duration for this individual incident row locally
                   const rowDuration = inc.status?.toLowerCase() === 'resolved' && inc.resolved_at
                     ? `${calculateDurationInMinutes(inc.timestamp, inc.resolved_at)} mins`
                     : 'N/A';
@@ -504,7 +503,6 @@ export default function Reports() {
                           </span>
                         </td>
                       )}
-                      {/* INDIVIDUAL INCIDENT DURATION CELL */}
                       {isManager && (
                         <td className="py-3.5 px-4 font-medium text-slate-600">
                           {rowDuration}

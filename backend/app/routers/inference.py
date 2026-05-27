@@ -19,6 +19,31 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/inference", tags=["inference"])
 settings = get_settings()
 
+# ─── Supported video MIME types ──────────────────────────────────────────────
+VIDEO_EXTENSIONS = {
+    "video/webm": ".webm",
+    "video/mp4": ".mp4",
+    "video/ogg": ".ogv",
+    "video/x-matroska": ".mkv",
+}
+
+def _resolve_clip_extension(upload: UploadFile) -> str:
+    """
+    Derive the correct file extension from the upload.
+    Priority: content_type → filename suffix → fallback .webm
+    Never returns .bin.
+    """
+    if upload.content_type and upload.content_type in VIDEO_EXTENSIONS:
+        return VIDEO_EXTENSIONS[upload.content_type]
+
+    if upload.filename:
+        suffix = Path(upload.filename).suffix.lower()
+        if suffix and suffix != ".bin":
+            return suffix
+
+    # Frontend always sends video/webm via MediaRecorder
+    return ".webm"
+
 
 async def _get_zone_users(camera_id: uuid.UUID, db: AsyncSession) -> list[uuid.UUID]:
     """ Fetches all unique user IDs linked to the camera's specific zone structure """
@@ -35,7 +60,7 @@ async def _assert_camera_access(user: User, camera_id: uuid.UUID, db: AsyncSessi
     """ Security gate ensuring assigned staff or parents have clearance for this specific hardware node """
     if user.role_name in ["Manager", "Parent"]:
         return
-        
+
     result = await db.execute(
         select(Camera)
         .join(Camera.zone)
@@ -49,6 +74,31 @@ async def _assert_camera_access(user: User, camera_id: uuid.UUID, db: AsyncSessi
         )
 
 
+async def _save_incident_clip(
+    clip: Optional[UploadFile],
+    clip_bytes: Optional[bytes],
+    incident_id: uuid.UUID,
+) -> Optional[str]:
+    """
+    Persists the video clip to disk and returns the public URL path.
+    Returns None if nothing to save or on failure.
+    """
+    if clip is None or not clip_bytes:
+        return None
+
+    try:
+        clips_dir = settings.CLIPS_DIR
+        clips_dir.mkdir(parents=True, exist_ok=True)
+        ext = _resolve_clip_extension(clip)          # ← fixed: never .bin
+        dest = clips_dir / f"{incident_id}{ext}"
+        dest.write_bytes(clip_bytes)
+        logger.info(f"Clip saved → {dest} ({len(clip_bytes)} bytes)")
+        return f"/incident_clips/{dest.name}"
+    except Exception as e:
+        logger.warning(f"Could not save clip file: {e}")
+        return None
+
+
 @router.post("/predict", response_model=PredictionResponse)
 async def predict(
     model_name: str = Form(..., description="fall_detection or violence_detection"),
@@ -59,6 +109,7 @@ async def predict(
     db: AsyncSession = Depends(get_db),
 ):
     """ Single model target execution endpoint utilized mainly by direct diagnostic or isolated scripts """
+
     if model_name not in ("fall_detection", "violence_detection"):
         raise HTTPException(status_code=422, detail="model_name must be fall_detection or violence_detection")
 
@@ -71,14 +122,20 @@ async def predict(
 
     await _assert_camera_access(current_user, camera_id, db)
 
+    # ── Always run inference on the FRAME (image); clip is stored only ────────
     if frame is not None:
         image_bytes = await frame.read()
-        clip_filename = None
         is_video = False
     else:
         image_bytes = await clip.read()
-        clip_filename = clip.filename
         is_video = True
+
+    # Read clip bytes separately so inference still uses the frame
+    clip_bytes: Optional[bytes] = None
+    if clip is not None and frame is not None:
+        clip_bytes = await clip.read()
+    elif clip is not None:
+        clip_bytes = image_bytes  # clip IS the media when no frame provided
 
     prediction = model_inference.predict(model_name, image_bytes, is_video=is_video)
 
@@ -89,8 +146,12 @@ async def predict(
     clip_path_saved = None
 
     positive_labels = {"fall", "violence"}
-    threshold = settings.FALL_CONFIDENCE_THRESHOLD if model_name == "fall_detection" else settings.VIOLENCE_CONFIDENCE_THRESHOLD
-    
+    threshold = (
+        settings.FALL_CONFIDENCE_THRESHOLD
+        if model_name == "fall_detection"
+        else settings.VIOLENCE_CONFIDENCE_THRESHOLD
+    )
+
     if str(label).lower() in positive_labels and confidence >= threshold:
         from app.models.incident import Incident
 
@@ -112,18 +173,11 @@ async def predict(
         incident_created = True
         incident_id = incident.incident_id
 
-        if clip is not None and image_bytes:
-            try:
-                clips_dir = Path(settings.CLIPS_DIR)
-                clips_dir.mkdir(parents=True, exist_ok=True)
-                ext = Path(clip_filename or "clip.bin").suffix or ".bin"
-                dest = clips_dir / f"{incident_id}{ext}"
-                dest.write_bytes(image_bytes)
-                clip_path_saved = f"/incident_clips/{dest.name}"
-                incident.incident_clip = clip_path_saved
-                await db.flush()
-            except Exception as e:
-                logger.warning(f"Could not save clip file: {e}")
+        # ── Save clip with correct extension ──────────────────────────────────
+        clip_path_saved = await _save_incident_clip(clip, clip_bytes, incident_id)
+        if clip_path_saved:
+            incident.incident_clip = clip_path_saved
+            await db.flush()
 
         user_ids = await _get_zone_users(camera_id, db)
         await ws_manager.notify_incident(
@@ -138,6 +192,7 @@ async def predict(
             stub=prediction.get("stub", False),
         )
 
+    await db.commit()
     return PredictionResponse(
         model=model_name,
         label=label,
@@ -157,7 +212,10 @@ async def detect_both(
 ):
     """
     Highly Optimized Frame Pipeline with Feature Crosstalk Suppression.
+
     Ensures that dynamic violence cues are not misclassified as low-threshold falls.
+    - Inference always runs on the JPEG frame (fast, accurate).
+    - The webm clip is stored on disk only when an incident is confirmed.
     """
     if frame is None and clip is None:
         raise HTTPException(status_code=422, detail="Provide either 'frame' (image) or 'clip' (video) for inference")
@@ -168,44 +226,59 @@ async def detect_both(
 
     await _assert_camera_access(current_user, camera_id, db)
 
+    # ── Read frame bytes for inference ────────────────────────────────────────
     if frame is not None:
         image_bytes = await frame.read()
-        clip_filename = None
         is_video = False
     else:
         image_bytes = await clip.read()
-        clip_filename = clip.filename
         is_video = True
 
-    # Run parallel inference sessions
-    results = model_inference.predict_both(image_bytes, is_video=is_video)
+    # ── Read clip bytes for storage (separate from inference bytes) ───────────
+    clip_bytes: Optional[bytes] = None
+    if clip is not None and frame is not None:
+        # Both provided: use frame for inference, clip for storage
+        clip_bytes = await clip.read()
+    elif clip is not None:
+        # Only clip provided: reuse same bytes
+        clip_bytes = image_bytes
 
+    # ── Run both models on the frame ──────────────────────────────────────────
+    results = model_inference.predict_both(image_bytes, is_video=is_video)
     fall_result = results["fall_detection"]
     violence_result = results["violence_detection"]
 
     incident_created = False
     incidents: list[dict] = []
-    positive_labels = {"fall", "violence"}
 
+    positive_labels = {"fall", "violence"}
     fall_label = fall_result["label"]
     fall_confidence = fall_result["confidence"]
     violence_label = violence_result["label"]
     violence_confidence = violence_result["confidence"]
 
-    # CROSSTALK ANTI-FLIP FILTER: If the framework catches dynamic flailing motions,
-    # block the fall gate if violence probability dominates the pixel tensor bounds.
-    is_fall_valid = str(fall_label).lower() in positive_labels and fall_confidence >= settings.FALL_CONFIDENCE_THRESHOLD
-    is_violence_valid = str(violence_label).lower() in positive_labels and violence_confidence >= settings.VIOLENCE_CONFIDENCE_THRESHOLD
+    is_fall_valid = (
+        str(fall_label).lower() in positive_labels
+        and fall_confidence >= settings.FALL_CONFIDENCE_THRESHOLD
+    )
+    is_violence_valid = (
+        str(violence_label).lower() in positive_labels
+        and violence_confidence >= settings.VIOLENCE_CONFIDENCE_THRESHOLD
+    )
 
-    if is_fall_valid and (violence_confidence > fall_confidence and str(violence_label).lower() in positive_labels):
+    # Crosstalk suppression
+    if is_fall_valid and (
+        violence_confidence > fall_confidence
+        and str(violence_label).lower() in positive_labels
+    ):
         logger.info("Fall detection blocked: dynamic action features highly lean toward violence distribution bounds.")
         is_fall_valid = False
 
-    # 1. EXECUTE FALL INCIDENT GATE
+    # ── Fall incident ─────────────────────────────────────────────────────────
     if is_fall_valid:
         from app.models.incident import Incident
-        fall_severity = "Critical" if fall_confidence >= 0.70 else "Warning"
 
+        fall_severity = "Critical" if fall_confidence >= 0.70 else "Warning"
         incident = Incident(
             danger_category=fall_severity,
             incident_type="fall",
@@ -219,19 +292,10 @@ async def detect_both(
         await db.refresh(incident)
         incident_created = True
 
-        clip_path_saved = None
-        if clip is not None and image_bytes:
-            try:
-                clips_dir = Path(settings.CLIPS_DIR)
-                clips_dir.mkdir(parents=True, exist_ok=True)
-                ext = Path(clip_filename or "clip.bin").suffix or ".bin"
-                dest = clips_dir / f"{incident.incident_id}{ext}"
-                dest.write_bytes(image_bytes)
-                clip_path_saved = f"/incident_clips/{dest.name}"
-                incident.incident_clip = clip_path_saved
-                await db.flush()
-            except Exception as e:
-                logger.warning(f"Could not save clip file: {e}")
+        clip_path_saved = await _save_incident_clip(clip, clip_bytes, incident.incident_id)
+        if clip_path_saved:
+            incident.incident_clip = clip_path_saved
+            await db.flush()
 
         user_ids = await _get_zone_users(camera_id, db)
         await ws_manager.notify_incident(
@@ -245,7 +309,6 @@ async def detect_both(
             incident_clip=clip_path_saved,
             stub=fall_result.get("stub", False),
         )
-
         incidents.append({
             "incident_id": str(incident.incident_id),
             "danger_category": fall_severity,
@@ -253,11 +316,11 @@ async def detect_both(
             "confidence": fall_confidence,
         })
 
-    # 2. EXECUTE VIOLENCE INCIDENT GATE
+    # ── Violence incident (only if no fall was already recorded) ─────────────
     if is_violence_valid and not incident_created:
         from app.models.incident import Incident
-        violence_severity = "Critical" if violence_confidence >= 0.85 else "Warning"
 
+        violence_severity = "Critical" if violence_confidence >= 0.85 else "Warning"
         incident = Incident(
             danger_category=violence_severity,
             incident_type="violence",
@@ -271,19 +334,10 @@ async def detect_both(
         await db.refresh(incident)
         incident_created = True
 
-        clip_path_saved = None
-        if clip is not None and image_bytes:
-            try:
-                clips_dir = Path(settings.CLIPS_DIR)
-                clips_dir.mkdir(parents=True, exist_ok=True)
-                ext = Path(clip_filename or "clip.bin").suffix or ".bin"
-                dest = clips_dir / f"{incident.incident_id}{ext}"
-                dest.write_bytes(image_bytes)
-                clip_path_saved = f"/incident_clips/{dest.name}"
-                incident.incident_clip = clip_path_saved
-                await db.flush()
-            except Exception as e:
-                logger.warning(f"Could not save clip file: {e}")
+        clip_path_saved = await _save_incident_clip(clip, clip_bytes, incident.incident_id)
+        if clip_path_saved:
+            incident.incident_clip = clip_path_saved
+            await db.flush()
 
         user_ids = await _get_zone_users(camera_id, db)
         await ws_manager.notify_incident(
@@ -297,7 +351,6 @@ async def detect_both(
             incident_clip=clip_path_saved,
             stub=violence_result.get("stub", False),
         )
-
         incidents.append({
             "incident_id": str(incident.incident_id),
             "danger_category": violence_severity,
@@ -306,7 +359,6 @@ async def detect_both(
         })
 
     await db.commit()
-
     return CombinedPredictionResponse(
         fall_detection=fall_result,
         violence_detection=violence_result,
@@ -314,9 +366,9 @@ async def detect_both(
         incidents=incidents if incidents else None,
     )
 
+
 @router.get("/status")
 async def inference_status(current_user: User = Depends(get_current_user)):
-    """ Returns active execution check criteria logs for operational ONNX engines """
     from app.services.inference import ONNX_AVAILABLE
     return {
         "fall_detection": model_inference.fall_session is not None,
