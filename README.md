@@ -34,7 +34,7 @@ This solution aims to reduce the reliance on continuous manual surveillance, min
 * **Real-Time WebSocket Notifications** - Instant alerts to connected users via real-time event streaming
 * **Multi-Channel Notifications** - SMS and email alerts for critical incidents
 * **Per-User Notification Preferences** - Customizable notification channels and preferences
-* **Incident Cooldown Management** - Prevents duplicate alerts within cooldown windows (20s for falls, 40s for violence)
+* **Incident Cooldown Management** - Prevents duplicate alerts within cooldown windows (10s for falls, 20s for violence)
 
 ### 📊 Comprehensive Incident Management
 * **Incident Logging & Storage** - Auto-generated incident records with video clips

@@ -139,6 +139,3 @@ curl -X POST "http://localhost:8000/yaqidh-api/auth/login" \
 - Ensure good lighting and clear visibility
 - Try with clear fall/violence actions
 
-## Next Steps
-
-See `README.md` for detailed documentation and architecture notes.
