@@ -27,7 +27,9 @@ const StatCard = ({ title, value, icon: Icon, color }) => (
 function buildEventMessage(incident) {
   const type = (incident.incident_type || '').toLowerCase();
   const category = (incident.danger_category || '').toLowerCase();
-  const zone = incident.camera?.zone?.zone_name || 'unknown zone';
+
+  // Extract zone name safely from database relationship layers
+  const zone = incident.camera?.zone?.zone_name || incident.zone_name || 'Designated Zone';
 
   const isFall = type.includes('fall');
   const isViolence = type.includes('violen') || type.includes('fight') || type.includes('physical');
@@ -107,6 +109,7 @@ export default function Dashboard() {
           type: inc.danger_category?.toLowerCase() === 'critical' ? 'critical' : 'warning',
           message: inc.incident_type,
           time: new Date(inc.timestamp).toLocaleTimeString(),
+          // Passing the whole response item so nested camera/zone can resolve properly
           details: buildEventMessage(inc),
         }));
         setRecentActivity(mappedActivities);
@@ -189,8 +192,8 @@ export default function Dashboard() {
                       </p>
                     </div>
                     <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${!zone.average_response_time_seconds ? 'bg-slate-200 text-slate-600' :
-                        zone.average_response_time_seconds <= 60 ? 'bg-emerald-100 text-emerald-800' :
-                          zone.average_response_time_seconds <= 300 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                      zone.average_response_time_seconds <= 60 ? 'bg-emerald-100 text-emerald-800' :
+                        zone.average_response_time_seconds <= 300 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
                       }`}>
                       Avg Delay: {formatResponseTime(zone.average_response_time_seconds)}
                     </span>
@@ -225,8 +228,8 @@ export default function Dashboard() {
                 key={filter.id}
                 onClick={() => setActiveFilter(filter.id)}
                 className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ease-in-out ${activeFilter === filter.id
-                    ? `${filter.color} shadow-sm scale-105`
-                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+                  ? `${filter.color} shadow-sm scale-105`
+                  : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
                   }`}
               >
                 {filter.label}
