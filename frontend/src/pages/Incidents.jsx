@@ -11,99 +11,112 @@ import {
 } from 'lucide-react';
 import axiosInstance from '../api/axiosInstance';
 
-const IncidentCard = ({ incident, isTeacher, onViewDetails, onViewClip, onDownloadClip, onResolveIncident }) => (
-  <div
-    onClick={() => onViewDetails(incident)}
-    className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow cursor-pointer flex flex-col justify-between"
-  >
-    <div>
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-start gap-3">
-          <div className={`p-3 rounded-xl ${incident.severity === 'critical' ? 'bg-red-100 text-red-600' :
-            incident.severity === 'warning' ? 'bg-orange-100 text-orange-600' :
-              'bg-blue-100 text-blue-600'
-            }`}>
-            {incident.severity === 'critical' ? <AlertTriangle size={20} /> : <AlertCircle size={20} />}
+const IncidentCard = ({
+  incident,
+  isTeacherOrManager,
+  userRole,
+  onViewDetails,
+  onViewClip,
+  onDownloadClip,
+  onResolveIncident
+}) => {
+  // Managers and teachers can always view media; parents are bound by visibility restrictions
+  const canViewMedia = userRole === 'manager' || userRole === 'teacher' || incident.severity !== 'parent_view_disabled';
+
+  return (
+    <div
+      onClick={() => onViewDetails(incident)}
+      className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow cursor-pointer flex flex-col justify-between"
+    >
+      <div>
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-start gap-3">
+            <div className={`p-3 rounded-xl ${incident.severity === 'critical' ? 'bg-red-100 text-red-600' :
+              incident.severity === 'warning' ? 'bg-orange-100 text-orange-600' :
+                'bg-blue-100 text-blue-600'
+              }`}>
+              {incident.severity === 'critical' ? <AlertTriangle size={20} /> : <AlertCircle size={20} />}
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-800">{incident.type}</h3>
+              <p className="text-sm text-slate-500 mt-1 flex items-center gap-1">
+                <MapPin size={14} /> {incident.location}
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="font-semibold text-slate-800">{incident.type}</h3>
-            <p className="text-sm text-slate-500 mt-1 flex items-center gap-1">
-              <MapPin size={14} /> {incident.location}
-            </p>
+
+          <div className="flex flex-col items-end gap-1">
+            <span className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${incident.severity === 'critical' ? 'bg-red-100 text-red-600' :
+              incident.severity === 'warning' ? 'bg-orange-100 text-orange-600' :
+                'bg-blue-100 text-blue-600'
+              }`}>
+              {incident.severity.charAt(0).toUpperCase() + incident.severity.slice(1)}
+            </span>
+
+            <div className="flex items-center gap-1.5 text-slate-400 mt-1">
+              <Clock size={14} />
+              <span className="text-[13px] font-medium">{incident.relativeTime}</span>
+            </div>
           </div>
         </div>
 
-        <div className="flex flex-col items-end gap-1">
-          <span className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${incident.severity === 'critical' ? 'bg-red-100 text-red-600' :
-            incident.severity === 'warning' ? 'bg-orange-100 text-orange-600' :
-              'bg-blue-100 text-blue-600'
-            }`}>
-            {incident.severity.charAt(0).toUpperCase() + incident.severity.slice(1)}
-          </span>
-
-          <div className="flex items-center gap-1.5 text-slate-400 mt-1">
+        <div className="flex items-center justify-between text-sm text-slate-600 mt-2">
+          <div className="flex items-center gap-2">
             <Clock size={14} />
-            <span className="text-[13px] font-medium">{incident.relativeTime}</span>
+            <span>{incident.time}</span>
           </div>
+
+          {canViewMedia && (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onViewClip(incident);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-colors"
+                title="View Clip"
+              >
+                <Eye size={18} />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDownloadClip(incident);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-colors"
+                title="Download Clip"
+              >
+                <Download size={18} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="flex items-center justify-between text-sm text-slate-600 mt-2">
+      <div className="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Clock size={14} />
-          <span>{incident.time}</span>
+          <div className={`w-3 h-3 rounded-full ${incident.status === 'resolved' ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
+          <span className="text-sm font-medium text-slate-600">
+            {incident.status === 'resolved' ? 'Resolved' : 'Active'}
+          </span>
         </div>
 
-        {incident.severity !== 'parent_view_disabled' && (
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onViewClip(incident);
-              }}
-              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-colors"
-              title="View Clip"
-            >
-              <Eye size={18} />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDownloadClip(incident);
-              }}
-              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-colors"
-              title="Download Clip"
-            >
-              <Download size={18} />
-            </button>
-          </div>
+        {isTeacherOrManager && incident.status !== 'resolved' && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onResolveIncident(incident.id);
+            }}
+            className="flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl transition-all duration-200"
+          >
+            <CheckCircle2 size={14} />
+            Mark Resolved
+          </button>
         )}
       </div>
     </div>
-
-    <div className="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <div className={`w-3 h-3 rounded-full ${incident.status === 'resolved' ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
-        <span className="text-sm font-medium text-slate-600">
-          {incident.status === 'resolved' ? 'Resolved' : 'Active'}
-        </span>
-      </div>
-
-      {isTeacher && incident.status !== 'resolved' && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onResolveIncident(incident.id);
-          }}
-          className="flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl transition-all duration-200"
-        >
-          <CheckCircle2 size={14} />
-          Mark Resolved
-        </button>
-      )}
-    </div>
-  </div>
-);
+  );
+};
 
 export default function Incidents() {
   const [incidents, setIncidents] = useState([]);
@@ -132,7 +145,10 @@ export default function Incidents() {
           id: item.incident_id,
           type: item.incident_type,
           severity: item.danger_category?.toLowerCase() === 'critical' ? 'critical' : 'warning',
-          location: item.camera?.zone?.zone_name || 'Unknown Zone',
+
+          // COMPREHENSIVE FALLBACK CHAIN: Handles flattened keys and nested ORM fields
+          location: item.zone_name || item.camera?.zone?.zone_name || item.location || 'Unknown Zone',
+
           time: new Date(item.timestamp).toLocaleString(),
           relativeTime: item.status === 'resolved' ? 'Archived Log' : 'Active Alert',
           status: item.status?.toLowerCase() || 'active'
@@ -149,7 +165,11 @@ export default function Incidents() {
   const handleResolveIncident = (incidentId) => {
     axiosInstance.patch(`/incidents/${incidentId}`, { status: 'resolved' })
       .then(() => {
-        setIncidents(prev => prev.map(inc => inc.id === incidentId ? { ...inc, status: 'resolved', relativeTime: 'Archived Log' } : inc));
+        setIncidents(prev => prev.map(inc => inc.id === incidentId ? {
+          ...inc,
+          status: 'resolved',
+          relativeTime: 'Archived Log'
+        } : inc));
       })
       .catch(err => console.error("Database update error context logic:", err));
   };
@@ -211,7 +231,6 @@ export default function Incidents() {
   const activeSevere = incidents.filter(i => i.status !== 'resolved' && i.severity === 'critical').length;
   const activeWarnings = incidents.filter(i => i.status !== 'resolved' && i.severity === 'warning').length;
 
-  // Updated Rule boundary: Managers and teachers can mark resolved.
   const isTeacherOrManager = currentUserRole === 'teacher' || currentUserRole === 'manager';
 
   if (loading) {
@@ -258,7 +277,8 @@ export default function Incidents() {
           <IncidentCard
             key={incident.id}
             incident={incident}
-            isTeacher={isTeacherOrManager}
+            isTeacherOrManager={isTeacherOrManager}
+            userRole={currentUserRole}
             onViewDetails={setSelectedIncident}
             onViewClip={handleViewClip}
             onDownloadClip={handleDownloadClip}
