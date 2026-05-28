@@ -192,92 +192,143 @@ This solution aims to reduce the reliance on continuous manual surveillance, min
 
 ```
 Yaqidh/
-├── backend/                          # FastAPI Python backend
-│   ├── app/
-│   │   ├── main.py                  # FastAPI app initialization
-│   │   ├── config.py                # Environment & settings
-│   │   ├── database.py              # SQLAlchemy async setup
-│   │   ├── auth/
-│   │   │   ├── jwt.py              # JWT token creation/validation
-│   │   │   └── dependencies.py     # Auth dependency injection
-│   │   ├── models/                 # Database ORM models
-│   │   │   ├── user.py            # User model (roles, zones, notifications)
-│   │   │   ├── zone.py            # Zone model (grouping cameras & users)
-│   │   │   ├── camera.py          # Camera model (video sources)
-│   │   │   ├── incident.py        # Incident model (detected events)
-│   │   │   ├── report.py          # Report model (analytics)
-│   │   │   ├── phone_code.py      # Phone verification OTP codes
-│   │   │   └── enums.py           # Role, category, incident type enums
-│   │   ├── schemas/                # Pydantic request/response schemas
-│   │   ├── routers/                # API endpoint handlers
-│   │   │   ├── auth.py            # Registration, login, phone verification
-│   │   │   ├── users.py           # User CRUD & profile management
-│   │   │   ├── zones.py           # Zone CRUD & user assignment
-│   │   │   ├── cameras.py         # Camera CRUD & configuration
-│   │   │   ├── incidents.py       # Incident CRUD & filtering
-│   │   │   ├── reports.py         # Report generation & analytics
-│   │   │   ├── inference.py       # AI model inference endpoints
-│   │   │   ├── websocket.py       # WebSocket notifications
-│   │   │   ├── clips.py           # Video clip streaming
-│   │   │   └── manager.py         # Manager-specific operations
-│   │   └── services/               # Business logic & AI
-│   │       ├── inference.py       # ONNX model loading & prediction
-│   │       ├── notifications.py   # WebSocket manager & cooldown logic
-│   │       └── retention.py       # Clip retention cleanup task
-│   ├── alembic/                    # Database migrations
-│   │   ├── versions/
-│   │   │   ├── 0001_initial_schema.py              # Core tables
-│   │   │   ├── 0002_security_enhancements.py       # Phone verification
-│   │   │   └── 0003_type_safety_and_schema.py      # Type improvements
-│   │   └── env.py                 # Migration environment config
-│   ├── incident_clips/             # Stored video clips
-│   ├── models/                     # ONNX model weights
-│   │   ├── fall_detection.onnx
-│   │   └── violence_detection.onnx
-│   ├── requirements.txt            # Python dependencies
-│   ├── start.sh                    # Backend startup script
-│   └── README.md                   # Backend documentation
+├── README.md                      # This file
 │
-├── frontend/                        # React + Vite web application
-│   ├── src/
-│   │   ├── App.jsx                # Main router & auth wrapper
-│   │   ├── main.jsx               # React entry point
-│   │   ├── App.css                # Global styles
-│   │   ├── index.css              # Base styles
-│   │   ├── pages/
-│   │   │   ├── Dashboard.jsx      # Manager/Parent dashboard overview
-│   │   │   ├── LiveMonitoring.jsx # Real-time video feed control
-│   │   │   ├── Incidents.jsx      # Incident log & viewer
-│   │   │   ├── Reports.jsx        # Analytics & reporting dashboard
-│   │   │   ├── Settings.jsx       # Profile, notifications, user/camera management
-│   │   │   ├── Login.jsx          # Authentication form
-│   │   │   ├── Register.jsx       # User registration (2-step)
-│   │   │   ├── ForgotPassword.jsx # Password reset request
-│   │   │   └── About.jsx          # System information page
-│   │   ├── components/
-│   │   │   └── Layout.jsx         # Sidebar navigation & app shell
-│   │   └── assets/                # Images, icons, etc.
-│   ├── package.json               # Node.js dependencies
-│   ├── vite.config.js             # Vite build configuration
-│   ├── tailwind.config.js         # Tailwind CSS theming
-│   ├── postcss.config.js          # PostCSS configuration
-│   ├── index.html                 # HTML entry point
-│   └── README.md                  # Frontend documentation
+├── backend/                       # FastAPI Python backend
+│   ├── alembic.ini               # Alembic configuration
+│   ├── requirements.txt           # Python dependencies
+│   ├── start.sh                   # Backend startup script
+│   │
+│   ├── alembic/                   # Database migrations
+│   │   ├── __init__.py
+│   │   ├── env.py                # Migration environment config
+│   │   ├── script.py.mako        # Migration script template
+│   │   └── versions/              # Migration files
+│   │       ├── 0001_initial_schema.py               # Core tables
+│   │       ├── 0002_security_enhancements.py        # Phone verification
+│   │       ├── 0003_type_safety_and_schema.py       # Type improvements
+│   │       └── 0004_add_incident_performance_tracking_fields.py
+│   │
+│   ├── app/                      # Application code
+│   │   ├── __init__.py
+│   │   ├── main.py               # FastAPI app initialization
+│   │   ├── config.py             # Environment & settings
+│   │   ├── database.py           # SQLAlchemy async setup
+│   │   │
+│   │   ├── auth/                 # Authentication
+│   │   │   ├── __init__.py
+│   │   │   ├── jwt.py           # JWT token creation/validation
+│   │   │   └── dependencies.py  # Auth dependency injection
+│   │   │
+│   │   ├── models/               # Database ORM models
+│   │   │   ├── __init__.py
+│   │   │   ├── user.py          # User model
+│   │   │   ├── zone.py          # Zone model
+│   │   │   ├── camera.py        # Camera model
+│   │   │   ├── incident.py      # Incident model
+│   │   │   ├── report.py        # Report model
+│   │   │   ├── phone_code.py    # Phone verification OTP codes
+│   │   │   └── enums.py         # Role, category, incident type enums
+│   │   │
+│   │   ├── schemas/              # Pydantic request/response schemas
+│   │   │   ├── __init__.py
+│   │   │   ├── auth.py
+│   │   │   ├── camera.py
+│   │   │   ├── incident.py
+│   │   │   ├── inference.py
+│   │   │   ├── manager.py
+│   │   │   ├── report.py
+│   │   │   ├── user.py
+│   │   │   └── zone.py
+│   │   │
+│   │   ├── routers/              # API endpoint handlers
+│   │   │   ├── __init__.py
+│   │   │   ├── auth.py          # Registration, login, phone verification
+│   │   │   ├── users.py         # User CRUD & profile management
+│   │   │   ├── zones.py         # Zone CRUD & user assignment
+│   │   │   ├── cameras.py       # Camera CRUD & configuration
+│   │   │   ├── incidents.py     # Incident CRUD & filtering
+│   │   │   ├── reports.py       # Report generation & analytics
+│   │   │   ├── inference.py     # AI model inference endpoints
+│   │   │   ├── websocket.py     # WebSocket notifications
+│   │   │   ├── clips.py         # Video clip streaming
+│   │   │   └── manager.py       # Manager-specific operations
+│   │   │
+│   │   ├── services/             # Business logic & AI
+│   │   │   ├── __init__.py
+│   │   │   ├── email.py         # Email service
+│   │   │   ├── inference.py     # ONNX model loading & prediction
+│   │   │   ├── notifications.py # WebSocket manager & cooldown logic
+│   │   │   └── retention.py     # Clip retention cleanup task
+│   │   │
+│   │   └── templates/            # Email templates
+│   │       ├── __init__.py
+│   │       └── email_templates.py
+│   │
+│   ├── incident_clips/           # Stored video clips
+│   └── models/                   # ONNX model weights
+│       ├── fall_detection.onnx
+│       └── violence_detection.onnx
 │
-├── notebooks/                      # AI Model Training
+├── frontend/                      # React + Vite web application
+│   ├── index.html                # HTML entry point
+│   ├── package.json              # Node.js dependencies
+│   ├── vite.config.js            # Vite build configuration
+│   ├── tailwind.config.js        # Tailwind CSS theming
+│   ├── postcss.config.js         # PostCSS configuration
+│   ├── eslint.config.js          # ESLint configuration
+│   ├── vercel.json               # Vercel deployment config
+│   │
+│   ├── public/                   # Static assets
+│   │
+│   └── src/                      # React source code
+│       ├── main.jsx              # React entry point
+│       ├── App.jsx               # Main router & auth wrapper
+│       ├── App.css               # Global styles
+│       ├── index.css             # Base styles
+│       │
+│       ├── api/
+│       │   └── axiosInstance.js  # API client configuration
+│       │
+│       ├── context/
+│       │   └── CameraContext.jsx # Camera context provider
+│       │
+│       ├── pages/                # Page components
+│       │   ├── Dashboard.jsx     # Manager/Parent dashboard overview
+│       │   ├── LiveMonitoring.jsx # Real-time video feed control
+│       │   ├── Incidents.jsx     # Incident log & viewer
+│       │   ├── Reports.jsx       # Analytics & reporting dashboard
+│       │   ├── Settings.jsx      # Profile, notifications, user/camera management
+│       │   ├── Login.jsx         # Authentication form
+│       │   ├── Register.jsx      # User registration (2-step)
+│       │   ├── ForgotPassword.jsx # Password reset request
+│       │   ├── ResetPassword.jsx # Password reset completion
+│       │   └── About.jsx         # System information page
+│       │
+│       ├── components/           # Reusable components
+│       │   └── Layout.jsx        # Sidebar navigation & app shell
+│       │
+│       └── assets/               # Images, icons, etc.
+│
+├── notebooks/                     # AI Model Training
 │   ├── fall model/
 │   │   ├── Yaqidh_Fall_Detection_Model.ipynb
-│   │   └── fall_best.pt           # PyTorch model checkpoint
+│   │   └── fall_best.pt          # PyTorch model checkpoint
+│   │
 │   └── violence model/
 │       ├── Yaqidh_Violence_Detection_Model.ipynb
-│       └── violence_best.pt       # PyTorch model checkpoint
+│       └── violence_best.pt      # PyTorch model checkpoint
 │
-├── tests/                         # Integration tests
-│   └── parallel_detection_test/
-│       ├── test_realtime_camera.py
-│       └── INTEGRATION_TESTING.md
-│
-└── README.md                      # This file
+└── tests/                        # Integration & unit tests
+    ├── notification_test/        # Email notification tests
+    │   ├── direct_email_test.py
+    │   └── email_flow.py
+    │
+    └── parallel_detection_test/  # Real-time detection tests
+        ├── __init__.py
+        ├── QUICKSTART.md
+        ├── requirements.txt
+        └── test_realtime_camera.py
 ```
 ## 👥 Contributors
 
