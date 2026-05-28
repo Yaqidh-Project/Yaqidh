@@ -50,7 +50,6 @@ app = FastAPI(
     description="AI-powered child safety monitoring backend — Fall Detection & Violence Detection",
     version="1.0.0",
     lifespan=lifespan,
-    root_path="/yaqidh-api",
 )
 
 # Explicitly configure CORS to accept connections from your Vercel frontend and local environments
