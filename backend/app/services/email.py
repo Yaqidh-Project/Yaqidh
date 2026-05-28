@@ -21,9 +21,6 @@ async def send_incident_email(
     user_role: str,
     incident_clip_url: str = None,
 ) -> bool:
-    """
-    Send incident notification email via Gmail SMTP.
-    """
     settings = get_settings()
     
     test_email = os.getenv("MANAGER_TEST_EMAIL")
