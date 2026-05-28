@@ -9,7 +9,11 @@ This script tests the complete email notification flow:
 5. Send incident detection to trigger email notification
 6. Report results
 """
+from dotenv import load_dotenv
+from pathlib import Path
 
+base_dir = Path(__file__).resolve().parent.parent.parent
+load_dotenv(dotenv_path=base_dir / "backend" / ".env")
 import asyncio
 import httpx
 import json
@@ -23,6 +27,7 @@ from sqlalchemy import select
 from app.database import AsyncSessionLocal
 from app.models.camera import Camera
 from app.models.zone import Zone
+
 
 BASE_URL = "http://localhost:8000"
 TEST_EMAIL = "test_manager@gmail.com"
