@@ -9,11 +9,8 @@ def get_incident_email_html(
     confidence_pct: float,
     incident_clip_url: str = None
 ) -> str:
-    """
-    Generate HTML email template for incident notification.
-    """
     video_section = (
-        f'📹 <a href="{incident_clip_url}">View Video Clip</a>'
+        f'📹 <a href="{incident_clip_url}" style="color: #d32f2f; font-weight: bold; text-decoration: underline;">View Video Clip</a>'
         if incident_clip_url
         else "Video clip will be available shortly in the dashboard."
     )
@@ -23,24 +20,25 @@ def get_incident_email_html(
 <head>
     <meta charset="UTF-8">
     <style>
-        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }}
-        .container {{ max-width: 650px; margin: 0 auto; border: 2px solid #d32f2f; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
-        .header {{ background: linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%); color: white; padding: 25px; text-align: center; }}
-        .header h1 {{ margin: 0; font-size: 28px; font-weight: bold; }}
-        .divider {{ background: #d32f2f; height: 3px; }}
-        .content {{ padding: 30px; background: #fafafa; }}
-        .greeting {{ font-size: 16px; margin-bottom: 15px; }}
+        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }}
+        .container {{ max-width: 650px; margin: 20px auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05); background: #ffffff; }}
+        .header {{ background: linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%); color: white; padding: 30px 25px; text-align: center; }}
+        .header h1 {{ margin: 0; font-size: 26px; font-weight: bold; letter-spacing: 0.5px; }}
+        .divider {{ background: #b71c1c; height: 4px; }}
+        .content {{ padding: 30px; background: #ffffff; }}
+        .greeting {{ font-size: 16px; margin-bottom: 15px; color: #222; }}
         .greeting strong {{ color: #d32f2f; }}
-        .message {{ font-size: 14px; margin-bottom: 25px; line-height: 1.8; }}
-        .details-box {{ background: white; border-left: 4px solid #d32f2f; padding: 20px; border-radius: 4px; margin: 20px 0; }}
-        .detail-row {{ display: flex; margin: 12px 0; font-size: 14px; }}
-        .detail-label {{ font-weight: bold; min-width: 140px; color: #333; }}
-        .detail-value {{ color: #666; }}
-        .video-section {{ text-align: center; padding: 15px; background: #f0f0f0; border-radius: 4px; margin: 20px 0; font-size: 14px; }}
-        .action-required {{ background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 4px; margin: 20px 0; font-weight: bold; color: #856404; }}
-        .footer {{ background: #f9f9f9; padding: 20px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee; }}
-        .footer p {{ margin: 5px 0; }}
-        .footer-heart {{ color: #d32f2f; }}
+        .message {{ font-size: 14px; margin-bottom: 25px; line-height: 1.8; color: #555; }}
+        .details-box {{ background: #fdfdfd; border-left: 4px solid #d32f2f; border-top: 1px solid #f0f0f0; border-right: 1px solid #f0f0f0; border-bottom: 1px solid #f0f0f0; padding: 20px; border-radius: 0 4px 4px 0; margin: 20px 0; }}
+        .detail-row {{ margin: 12px 0; font-size: 14px; border-bottom: 1px dotted #eeeeee; padding-bottom: 8px; }}
+        .detail-row:last-child {{ border-bottom: none; padding-bottom: 0; }}
+        .detail-label {{ font-weight: bold; display: inline-block; width: 150px; color: #333; vertical-align: top; }}
+        .detail-value {{ display: inline-block; color: #555; vertical-align: top; }}
+        .video-section {{ text-align: center; padding: 18px; background: #f9f9f9; border: 1px dashed #d32f2f; border-radius: 6px; margin: 25px 0; font-size: 14px; color: #444; }}
+        .action-required {{ background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 0 4px 4px 0; margin: 20px 0; font-weight: bold; color: #856404; font-size: 13px; line-height: 1.5; }}
+        .footer {{ background: #f9f9f9; padding: 25px; text-align: center; font-size: 12px; color: #888; border-top: 1px solid #eee; }}
+        .footer p {{ margin: 6px 0; }}
+        .footer-heart {{ color: #d32f2f; font-size: 14px; }}
     </style>
 </head>
 <body>
@@ -52,26 +50,26 @@ def get_incident_email_html(
         
         <div class="content">
             <div class="greeting">
-                Dear <strong>{user_role}</strong>,
+                Dear <strong>{user_role.capitalize()}</strong>,
             </div>
             
             <div class="message">
-                A real-time safety alert has been triggered in the monitored zone.
+                A real-time safety alert has been triggered in the monitored daycare environment.
                 Please review the details of the detected incident below:
             </div>
             
             <div class="details-box">
                 <div class="detail-row">
                     <span class="detail-label">🎯 Event Type:</span>
-                    <span class="detail-value">{incident_type.capitalize()}</span>
+                    <span class="detail-value" style="font-weight: 600; color: #d32f2f;">{incident_type.capitalize()}</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">📹 Camera:</span>
-                    <span class="detail-value">{camera_name} ({camera_id})</span>
+                    <span class="detail-value">{camera_name} <span style="color:#999; font-size:12px;">(ID: {camera_id})</span></span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">📍 Zone:</span>
-                    <span class="detail-value">{zone_name} ({zone_id})</span>
+                    <span class="detail-value">{zone_name} <span style="color:#999; font-size:12px;">(ID: {zone_id})</span></span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">⏰ Timestamp:</span>
@@ -79,7 +77,7 @@ def get_incident_email_html(
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">📊 Confidence:</span>
-                    <span class="detail-value">{confidence_pct:.1f}%</span>
+                    <span class="detail-value" style="font-weight: 600;">{confidence_pct:.1f}%</span>
                 </div>
             </div>
             
@@ -90,13 +88,12 @@ def get_incident_email_html(
             <div class="action-required">
                 ⚠️ ACTION REQUIRED: Please log in to your Yaqidh Incident Log immediately to review the incident.
             </div>
-            </div>
         </div>
         
         <div class="footer">
             <p><strong>Yaqidh Intelligent Monitoring System</strong></p>
             <p>© 2026 Yaqidh. All rights reserved.</p>
-            <p>Made with <span class="footer-heart">❤️</span> by Yaqidh Team</p>
+            <p>Made with <span class="footer-heart">❤️</span> by Yaqidh Academic Team</p>
         </div>
     </div>
 </body>
