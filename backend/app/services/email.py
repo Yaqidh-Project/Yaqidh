@@ -12,11 +12,14 @@ logger = logging.getLogger(__name__)
 async def send_incident_email(
     user_email: str,
     incident_type: str,
+    zone_id: str,
     zone_name: str,
+    camera_id: str,
+    camera_name: str,
     timestamp: datetime,
     confidence: float,
+    user_role: str,
     incident_clip_url: str = None,
-    camera_name: str = None,
 ) -> bool:
     """
     Send incident notification email via Gmail SMTP.
@@ -31,26 +34,26 @@ async def send_incident_email(
         email_recipient = user_email
         logger.info(f"Using production email: {user_email}")
     
-    subject = f"🚨 {incident_type.capitalize()} Detected in {zone_name}"
+    subject = f"🚨 Yaqidh Safety Alert"
     
-    timestamp_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+    timestamp_str = timestamp.strftime("%Y-%m-%d %H:%M:%S AST")
     confidence_pct = confidence * 100
     
-    video_link = f'<p><a href="{incident_clip_url}">View Video</a></p>' if incident_clip_url else ""
+    from app.templates.email_templates import get_incident_email_html
     
-    body = f"""<!DOCTYPE html>
-<html>
-<body>
-<h2>Incident Alert</h2>
-<p><strong>Type:</strong> {incident_type}</p>
-<p><strong>Zone:</strong> {zone_name}</p>
-<p><strong>Camera:</strong> {camera_name or 'Unknown'}</p>
-<p><strong>Time:</strong> {timestamp_str}</p>
-<p><strong>Confidence:</strong> {confidence_pct:.1f}%</p>
-{video_link}
-<p>Please check the dashboard for more details.</p>
-</body>
-</html>"""
+    html_body = get_incident_email_html(
+        user_role=user_role,
+        incident_type=incident_type,
+        camera_id=camera_id,
+        camera_name=camera_name,
+        zone_id=zone_id,
+        zone_name=zone_name,
+        timestamp_str=timestamp_str,
+        confidence_pct=confidence_pct,
+        incident_clip_url=incident_clip_url
+    )
+    
+    body = html_body
     
     try:
         async with aiosmtplib.SMTP(

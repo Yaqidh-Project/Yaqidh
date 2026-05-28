@@ -10,6 +10,12 @@ This script tests the complete email notification flow:
 6. Report results
 """
 
+from pathlib import Path
+from dotenv import load_dotenv
+# Force loading the correct .env file from the backend folder
+base_dir = Path(__file__).resolve().parent.parent.parent
+load_dotenv(dotenv_path=base_dir / "backend" / ".env")
+
 import asyncio
 import httpx
 import json

@@ -11,8 +11,6 @@ def get_incident_email_html(
 ) -> str:
     """
     Generate HTML email template for incident notification.
-    Shows both names and IDs for camera and zone.
-    Greeting changes based on user role.
     """
     video_section = (
         f'📹 <a href="{incident_clip_url}">View Video Clip</a>'
@@ -90,7 +88,8 @@ def get_incident_email_html(
             </div>
             
             <div class="action-required">
-                ⚠️ ACTION REQUIRED: Please log in to your Yaqidh Dashboard immediately to review the incident.
+                ⚠️ ACTION REQUIRED: Please log in to your Yaqidh Incident Log immediately to review the incident.
+            </div>
             </div>
         </div>
         
