@@ -41,7 +41,6 @@ def _resolve_clip_extension(upload: UploadFile) -> str:
         if suffix and suffix != ".bin":
             return suffix
 
-    # Frontend always sends video/webm via MediaRecorder
     return ".webm"
 
 
@@ -81,7 +80,6 @@ async def _save_incident_clip(
 ) -> Optional[str]:
     """
     Persists the video clip to disk and returns the public URL path.
-    Returns None if nothing to save or on failure.
     """
     if clip is None or not clip_bytes:
         return None
@@ -89,7 +87,7 @@ async def _save_incident_clip(
     try:
         clips_dir = settings.CLIPS_DIR
         clips_dir.mkdir(parents=True, exist_ok=True)
-        ext = _resolve_clip_extension(clip)          # ← fixed: never .bin
+        ext = _resolve_clip_extension(clip)
         dest = clips_dir / f"{incident_id}{ext}"
         dest.write_bytes(clip_bytes)
         logger.info(f"Clip saved → {dest} ({len(clip_bytes)} bytes)")
@@ -108,8 +106,6 @@ async def predict(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """ Single model target execution endpoint utilized mainly by direct diagnostic or isolated scripts """
-
     if model_name not in ("fall_detection", "violence_detection"):
         raise HTTPException(status_code=422, detail="model_name must be fall_detection or violence_detection")
 
@@ -122,7 +118,6 @@ async def predict(
 
     await _assert_camera_access(current_user, camera_id, db)
 
-    # ── Always run inference on the FRAME (image); clip is stored only ────────
     if frame is not None:
         image_bytes = await frame.read()
         is_video = False
@@ -130,12 +125,11 @@ async def predict(
         image_bytes = await clip.read()
         is_video = True
 
-    # Read clip bytes separately so inference still uses the frame
     clip_bytes: Optional[bytes] = None
     if clip is not None and frame is not None:
         clip_bytes = await clip.read()
     elif clip is not None:
-        clip_bytes = image_bytes  # clip IS the media when no frame provided
+        clip_bytes = image_bytes
 
     prediction = model_inference.predict(model_name, image_bytes, is_video=is_video)
 
@@ -173,13 +167,14 @@ async def predict(
         incident_created = True
         incident_id = incident.incident_id
 
-        # ── Save clip with correct extension ──────────────────────────────────
         clip_path_saved = await _save_incident_clip(clip, clip_bytes, incident_id)
         if clip_path_saved:
             incident.incident_clip = clip_path_saved
             await db.flush()
 
         user_ids = await _get_zone_users(camera_id, db)
+        
+        # FIX 1: Added await to guarantee execution before response context terminates
         await ws_manager.notify_incident(
             user_ids,
             incident_id=incident.incident_id,
@@ -210,13 +205,6 @@ async def detect_both(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Highly Optimized Frame Pipeline with Feature Crosstalk Suppression.
-
-    Ensures that dynamic violence cues are not misclassified as low-threshold falls.
-    - Inference always runs on the JPEG frame (fast, accurate).
-    - The webm clip is stored on disk only when an incident is confirmed.
-    """
     if frame is None and clip is None:
         raise HTTPException(status_code=422, detail="Provide either 'frame' (image) or 'clip' (video) for inference")
 
@@ -226,7 +214,6 @@ async def detect_both(
 
     await _assert_camera_access(current_user, camera_id, db)
 
-    # ── Read frame bytes for inference ────────────────────────────────────────
     if frame is not None:
         image_bytes = await frame.read()
         is_video = False
@@ -234,16 +221,12 @@ async def detect_both(
         image_bytes = await clip.read()
         is_video = True
 
-    # ── Read clip bytes for storage (separate from inference bytes) ───────────
     clip_bytes: Optional[bytes] = None
     if clip is not None and frame is not None:
-        # Both provided: use frame for inference, clip for storage
         clip_bytes = await clip.read()
     elif clip is not None:
-        # Only clip provided: reuse same bytes
         clip_bytes = image_bytes
 
-    # ── Run both models on the frame ──────────────────────────────────────────
     results = model_inference.predict_both(image_bytes, is_video=is_video)
     fall_result = results["fall_detection"]
     violence_result = results["violence_detection"]
@@ -266,7 +249,6 @@ async def detect_both(
         and violence_confidence >= settings.VIOLENCE_CONFIDENCE_THRESHOLD
     )
 
-    # Crosstalk suppression
     if is_fall_valid and (
         violence_confidence > fall_confidence
         and str(violence_label).lower() in positive_labels
@@ -298,6 +280,8 @@ async def detect_both(
             await db.flush()
 
         user_ids = await _get_zone_users(camera_id, db)
+        
+        # FIX 2: Added await to prevent request context from closing prematurely
         await ws_manager.notify_incident(
             user_ids,
             incident_id=incident.incident_id,
@@ -316,7 +300,7 @@ async def detect_both(
             "confidence": fall_confidence,
         })
 
-    # ── Violence incident (only if no fall was already recorded) ─────────────
+    # ── Violence incident ─────────────────────────────────────────────────────
     if is_violence_valid and not incident_created:
         from app.models.incident import Incident
 
@@ -340,6 +324,8 @@ async def detect_both(
             await db.flush()
 
         user_ids = await _get_zone_users(camera_id, db)
+        
+        # FIX 3: Added await to prevent request context from closing prematurely
         await ws_manager.notify_incident(
             user_ids,
             incident_id=incident.incident_id,

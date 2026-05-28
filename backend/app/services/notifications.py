@@ -70,11 +70,6 @@ class ConnectionManager:
     ):
         """
         Notify users about an incident with per-user, per-incident-type cooldown.
-        
-        Cooldowns are enforced per user/camera/incident_type combination to avoid
-        spamming the same user with multiple notifications of the same type.
-        - Fall detection: 10 second cooldown
-        - Violence detection: 20 second cooldown
         """
         cooldown_seconds = INCIDENT_COOLDOWNS.get(incident_type, 10)
         now = datetime.now().timestamp()
@@ -90,7 +85,7 @@ class ConnectionManager:
                 _user_incident_cooldowns[cooldown_key] = now
         
         if not users_to_notify:
-            logger.debug(f"No users to notify for {incident_type} incident (all in cooldown)")
+            logger.info(f"📢 [Yaqidh Notification] No users to notify for {incident_type} (all in cooldown)")
             return
         
         # Build notification payload
@@ -125,12 +120,18 @@ class ConnectionManager:
             camera = camera_result.scalar_one_or_none()
             camera_name = camera.camera_name if camera else None
         
-        # Fetch all user emails for users to notify
+        # Safely fetch users and extract data without consuming the stream twice
         async with AsyncSessionLocal() as db:
             users_result = await db.execute(
                 select(User).where(User.user_id.in_(users_to_notify))
             )
-            users = {str(u.user_id): u.email for u in users_result.scalars().all()}
+            all_fetched_users = users_result.scalars().all()
+            
+            # Map values correctly
+            users = {str(u.user_id): u.email for u in all_fetched_users}
+            users_roles = {str(u.user_id): u.role_name for u in all_fetched_users}
+
+        zone_id = str(zone.zone_id) if zone else "Unknown"
         
         # Build tasks for WebSocket and Email sends in parallel
         tasks = []
@@ -142,24 +143,36 @@ class ConnectionManager:
             for ws in self._connections.get(key, []):
                 tasks.append(self._safe_send(ws, message))
         
-        # Email send for each user (in parallel with WebSocket)
+        # Email send for each user
+        email_count = 0
         for uid in users_to_notify:
-            if str(uid) in users:
+            uid_str = str(uid)
+            if uid_str in users:
+                email_count += 1
+                logger.info(f"📧 Queueing email for user {uid}")
+                logger.info(f"📧 [Yaqidh Notification] Preparing email task for: {users[uid_str]} (Role: {users_roles.get(uid_str, 'User')})")
                 tasks.append(
                     send_incident_email(
-                        user_email=users[str(uid)],
+                        user_email=users[uid_str],
                         incident_type=incident_type,
+                        zone_id=zone_id,
                         zone_name=zone_name,
+                        camera_id=str(camera_id),
+                        camera_name=camera_name,
                         timestamp=timestamp,
                         confidence=confidence,
                         incident_clip_url=incident_clip,
-                        camera_name=camera_name
+                        user_role=users_roles.get(uid_str, "User")
                     )
                 )
         
+        logger.info(f"🚀 [Yaqidh Notification] Dispatching {len(tasks)} parallel tasks ({email_count} Emails, {len(tasks) - email_count} WebSockets)...")
+        
         # Execute all tasks in parallel (WebSocket + Email)
         if tasks:
+            logger.info(f"⏳ Executing {len(tasks)} tasks (WebSocket + Email)")
             await asyncio.gather(*tasks, return_exceptions=True)
+            logger.info("✅ [Yaqidh Notification] All dispatched notification tasks completed execution.")
 
     async def _safe_send(self, websocket: WebSocket, message: str):
         try:
@@ -173,4 +186,3 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
-
