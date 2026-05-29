@@ -40,42 +40,44 @@ export default function Register() {
   };
 
   const handleRegister = async (e) => {
-    e.preventDefault();
-    setError('');
+  e.preventDefault();
+  setError('');
 
-    if (!validateForm()) return;
-    setLoading(true);
+  if (!validateForm()) return;
+  setLoading(true);
 
-    try {
-      // 1. Create account on the backend using the proper Pydantic payload mapping
-      await axiosInstance.post('/auth/register', {
-        full_name: formData.fullName,
-        email: formData.email,
-        password: formData.password,
-        phone_number: formData.phone,
-        role_name: formData.role, 
-        notification_prefs: { sms: true, email: true, app: true }
+  try {
+    // ✅ OPTIMIZED: Single registration request
+    const response = await axiosInstance.post('/auth/register', {
+      full_name: formData.fullName,
+      email: formData.email,
+      password: formData.password,
+      phone_number: formData.phone,
+      role_name: formData.role, 
+      notification_prefs: { sms: true, email: true, app: true }
+    });
+
+    // ✅ Store token immediately
+    localStorage.setItem('token', response.data.access_token);
+    
+    // ✅ OPTIMIZED: Dispatch OTP request in background (don't block UI)
+    axiosInstance.post('/auth/phone/request-code')
+      .then(() => {
+        console.log('✅ OTP dispatch queued after registration');
+      })
+      .catch((err) => {
+        console.error('⚠️ OTP request failed (user can request manually):', err);
       });
-
-      // 2. Perform temporary login to retrieve the JWT token for requesting the OTP code
-      const loginRes = await axiosInstance.post('/auth/login', {
-        email: formData.email,
-        password: formData.password
-      });
-      localStorage.setItem('token', loginRes.data.access_token);
-
-      // 3. Trigger the real multi-factor SMS OTP code request
-      await axiosInstance.post('/auth/phone/request-code');
-      
-      // Advance to the OTP confirmation section
-      setStep(2);
-    } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.detail || 'Registration failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
+    
+    // ✅ Instantly advance to the OTP step without any network lag
+    setStep(2);
+  } catch (err) {
+    console.error(err);
+    setError(err.response?.data?.detail || 'Registration failed. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleVerifyPhone = async (e) => {
     e.preventDefault();

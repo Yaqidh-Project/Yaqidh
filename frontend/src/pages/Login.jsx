@@ -45,7 +45,7 @@ export default function Login() {
 
     setLoading(true);
     try {
-      // 1) Login
+      // ✅ OPTIMIZED: Single critical request (login)
       const res = await axiosInstance.post('/auth/login', { email, password });
       const { access_token, role } = res.data || {};
 
@@ -54,7 +54,7 @@ export default function Login() {
         return;
       }
 
-      // Store tokens so /users/me is authorized
+      // ✅ OPTIMIZED: Store token immediately and dispatch profile fetch in parallel
       localStorage.setItem('token', access_token);
       sessionStorage.setItem('token', access_token);
 
@@ -62,52 +62,68 @@ export default function Login() {
       localStorage.setItem('user', JSON.stringify(basicUser));
       sessionStorage.setItem('user', JSON.stringify(basicUser));
 
-      // 2) Fetch profile info
-      let me;
-      try {
-        me = await axiosInstance.get('/users/me'); // adjust if different
-      } catch (fetchErr) {
-        console.error('Fetch /users/me failed:', fetchErr);
-        navigate('/', { replace: true });
-        return;
-      }
+      // ✅ OPTIMIZED: Fetch profile in background - don't block navigation
+      // Dispatch the profile fetch but don't await it on critical path
+      const profileFetch = axiosInstance.get('/users/me')
+        .then((meRes) => {
+          const roleRaw = meRes.data?.role ?? meRes.data?.role_name ?? role;
+          const phoneVerified = normalizeBool(meRes.data?.phone_verified);
+          const phoneNumber = meRes.data?.phone_number || '';
 
-      const roleRaw = me.data?.role ?? me.data?.role_name ?? role;
-      const isTeacher = normalizeIsTeacher(roleRaw);
+          // Update cached user with full profile
+          const enrichedPayload = {
+            email,
+            role: Array.isArray(roleRaw)
+              ? roleRaw.map((x) => String(x).toLowerCase())
+              : String(roleRaw || '').toLowerCase(),
+            phone_verified: !!phoneVerified,
+            phone_number: phoneNumber || null
+          };
+          localStorage.setItem('user', JSON.stringify(enrichedPayload));
+          sessionStorage.setItem('user', JSON.stringify(enrichedPayload));
 
-      const phoneVerified = normalizeBool(me.data?.phone_verified);
-      const phoneNumber = me.data?.phone_number || '';
+          // Return profile info for phone verification check
+          return { roleRaw, phoneVerified, phoneNumber, isTeacher: normalizeIsTeacher(roleRaw) };
+        })
+        .catch((fetchErr) => {
+          console.error('Fetch /users/me failed (non-critical):', fetchErr);
+          return null;
+        });
 
-      // Persist enriched user (for any route guards)
-      const userPayload = {
-        email,
-        role: Array.isArray(roleRaw)
-          ? roleRaw.map((x) => String(x).toLowerCase())
-          : String(roleRaw || '').toLowerCase(),
-        phone_verified: !!phoneVerified,
-        phone_number: phoneNumber || null
-      };
-      localStorage.setItem('user', JSON.stringify(userPayload));
-      sessionStorage.setItem('user', JSON.stringify(userPayload));
+      // ✅ Check if teacher needs phone verification WHILE profile is fetching
+      const isTeacher = normalizeIsTeacher(role);
+      
+      // ✅ OPTIMIZED: If teacher, gate phone verification BEFORE profile fetch completes
+      if (isTeacher) {
+        // We need profile to know if verified, so await but with tight timeout
+        const profileData = await Promise.race([
+          profileFetch,
+          new Promise((resolve) => setTimeout(() => resolve(null), 5000)) // 5-second timeout
+        ]);
 
-      // 3) Gate only unverified teachers
-      if (isTeacher && !phoneVerified) {
-        setRequiresPhoneVerification(true);
-        setPhone(phoneNumber);
+        if (profileData?.isTeacher && !profileData?.phoneVerified) {
+          setRequiresPhoneVerification(true);
+          setPhone(profileData.phoneNumber || '');
 
-        // Optional: auto-request a fresh code on entry to the step
-        try {
+          // ✅ OPTIMIZED: Request code in background - fire and forget
           setRequesting(true);
-          await axiosInstance.post('/auth/phone/request-code', { phone_number: phoneNumber });
-        } catch (e1) {
-          // silent; user can hit "Resend code"
-        } finally {
-          setRequesting(false);
+          axiosInstance.post('/auth/phone/request-code')
+            .then(() => {
+              console.log('OTP request dispatched');
+            })
+            .catch((e) => {
+              console.error('OTP request failed (user can retry):', e);
+            })
+            .finally(() => {
+              setRequesting(false);
+            });
+
+          setLoading(false);
+          return;
         }
-        return;
       }
 
-      // Everyone else (or verified teacher)
+      // ✅ Everyone else navigates immediately
       navigate('/', { replace: true });
     } catch (err) {
       console.error('Login error:', err);
