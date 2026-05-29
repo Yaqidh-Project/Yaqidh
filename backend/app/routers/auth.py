@@ -200,14 +200,40 @@ async def request_phone_code(
     db.add(phone_code)
     await db.flush()
 
-    # Log execution structure mimicking third-party SMS telephony gateways
+    # ✅ Send OTP via Email
+    from app.services.email import send_otp_email
+    from app.database import AsyncSessionLocal
+    
+    try:
+        # Get user from database to retrieve email
+        user_for_email = current_user
+        user_email = user_for_email.email
+        user_name = user_for_email.full_name
+        
+        # Send OTP via email
+        email_sent = await send_otp_email(
+            user_email=user_email,
+            user_name=user_name,
+            otp_code=code,
+            expiry_minutes=settings.OTP_EXPIRE_MINUTES
+        )
+        
+        if email_sent:
+            logger.info(f"✅ OTP email sent to {user_email} (phone: {current_user.phone_number})")
+        else:
+            logger.warning(f"❌ Failed to send OTP email to {user_email}, falling back to MOCK SMS")
+    
+    except Exception as e:
+        logger.error(f"Error sending OTP email: {str(e)}, falling back to MOCK SMS")
+    
+    # ✅ KEEP MOCK SMS AS BACKUP (for testing if email fails)
     logger.info(
         f"[MOCK SMS] Sending OTP {code} to {current_user.phone_number} "
         f"(user={current_user.user_id}, expires={expires_at.isoformat()})"
     )
     print(
         f"\n{'='*50}\n"
-        f"[MOCK SMS] To: {current_user.phone_number}\n"
+        f"[MOCK SMS - BACKUP] To: {current_user.phone_number}\n"
         f"Your Yaqidh verification code is: {code}\n"
         f"It expires in {settings.OTP_EXPIRE_MINUTES} minutes.\n"
         f"{'='*50}\n"

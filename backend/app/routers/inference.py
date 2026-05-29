@@ -45,14 +45,49 @@ def _resolve_clip_extension(upload: UploadFile) -> str:
 
 
 async def _get_zone_users(camera_id: uuid.UUID, db: AsyncSession) -> list[uuid.UUID]:
-    """ Fetches all unique user IDs linked to the camera's specific zone structure """
+    """
+    Get users who should receive notification for this camera.
+    - Manager: all zones
+    - Teacher: assigned zone only
+    - Parent: assigned zone only
+    """
+    # 1. Get zone for this camera
+    zone_result = await db.execute(
+        select(Zone)
+        .join(Camera)
+        .where(Camera.camera_id == camera_id)
+    )
+    zone = zone_result.scalar_one_or_none()
+    
+    if not zone:
+        logger.warning(f"No zone found for camera {camera_id}")
+        return []
+    
+    # 2. Get ALL users assigned to this zone (Teachers + Parents)
     result = await db.execute(
         select(User.user_id)
         .join(Zone.users)
-        .join(Zone.cameras)
-        .where(Camera.camera_id == camera_id)
+        .where(Zone.zone_id == zone.zone_id)
     )
-    return [row[0] for row in result.all()]
+    zone_users = [row[0] for row in result.all()]
+    
+    logger.info(f"Found {len(zone_users)} zone-assigned users (Teachers/Parents) for zone {zone.zone_id}")
+    
+    # 3. Add ALL Managers (they get notified for all zones)
+    manager_result = await db.execute(
+        select(User.user_id)
+        .where(User.role_name == "Manager")
+    )
+    managers = [row[0] for row in manager_result.all()]
+    
+    logger.info(f"Found {len(managers)} managers")
+    
+    # Combine: zone users + all managers (avoid duplicates)
+    all_users = list(set(zone_users + managers))
+    
+    logger.info(f"Total users to notify: {len(all_users)}")
+    
+    return all_users
 
 
 async def _assert_camera_access(user: User, camera_id: uuid.UUID, db: AsyncSession) -> None:
@@ -91,7 +126,7 @@ async def _save_incident_clip(
         dest = clips_dir / f"{incident_id}{ext}"
         dest.write_bytes(clip_bytes)
         logger.info(f"Clip saved → {dest} ({len(clip_bytes)} bytes)")
-        return f"/incident_clips/{dest.name}"
+        return f"http://localhost:8000/clips/{dest.name}"
     except Exception as e:
         logger.warning(f"Could not save clip file: {e}")
         return None

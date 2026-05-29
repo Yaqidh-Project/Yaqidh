@@ -50,6 +50,8 @@ app = FastAPI(
     description="AI-powered child safety monitoring backend — Fall Detection & Violence Detection",
     version="1.0.0",
     lifespan=lifespan,
+    
+
 )
 
 # Explicitly configure CORS to accept connections from your Vercel frontend and local environments
@@ -63,7 +65,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
