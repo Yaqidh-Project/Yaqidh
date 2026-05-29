@@ -72,49 +72,64 @@ export default function Dashboard() {
     };
     setUserRole(roleNames[role] || 'User');
 
-    axiosInstance.get('/users/me')
-      .then(res => {
-        if (res.data?.full_name) setUserName(res.data.full_name);
-      })
-      .catch(err => console.error('Error loading user profile:', err));
-
-    axiosInstance.get('/cameras')
-      .then(res => {
-        const total = res.data.length;
-        setTotalCameras(total);
-        setActiveCameras(`${activeCount}/${total}`);
-      })
-      .catch(err => {
-        console.error('Error loading cameras count loop metrics:', err);
-        setActiveCameras(`${activeCount}/${totalCameras || '—'}`);
-      });
-
-    if (role === 'manager') {
-      setIsLoadingPerformance(true);
-      axiosInstance.get('/manager/performance-dashboard')
+    // ✅ OPTIMIZED: Dispatch ALL requests in parallel (don't sequence them)
+    // This ensures network utilization is maximized and loading is faster
+    const requests = [
+      // 1. Fetch user profile
+      axiosInstance.get('/users/me')
         .then(res => {
-          setPerformanceData(res.data);
-          setIsLoadingPerformance(false);
+          if (res.data?.full_name) setUserName(res.data.full_name);
+        })
+        .catch(err => console.error('Error loading user profile:', err)),
+
+      // 2. Fetch cameras
+      axiosInstance.get('/cameras')
+        .then(res => {
+          const total = res.data.length;
+          setTotalCameras(total);
+          setActiveCameras(`${activeCount}/${total}`);
         })
         .catch(err => {
-          console.error("Error loading performance tracking data:", err);
-          setIsLoadingPerformance(false);
-        });
+          console.error('Error loading cameras:', err);
+          setActiveCameras(`${activeCount}/${totalCameras || '—'}`);
+        }),
+
+      // 3. Fetch incidents
+      axiosInstance.get('/incidents')
+        .then(res => {
+          const mappedActivities = res.data.map(inc => ({
+            id: inc.incident_id,
+            type: inc.danger_category?.toLowerCase() === 'critical' ? 'critical' : 'warning',
+            message: inc.incident_type,
+            time: new Date(inc.timestamp).toLocaleTimeString(),
+            details: buildEventMessage(inc),
+          }));
+          setRecentActivity(mappedActivities);
+        })
+        .catch(err => console.error("Error loading incidents:", err)),
+    ];
+
+    // 4. Manager-specific: Fetch performance dashboard
+    if (role === 'manager') {
+      setIsLoadingPerformance(true);
+      requests.push(
+        axiosInstance.get('/manager/performance-dashboard')
+          .then(res => {
+            setPerformanceData(res.data);
+          })
+          .catch(err => {
+            console.error("Error loading performance data:", err);
+          })
+          .finally(() => {
+            setIsLoadingPerformance(false);
+          })
+      );
     }
 
-    axiosInstance.get('/incidents')
-      .then(res => {
-        const mappedActivities = res.data.map(inc => ({
-          id: inc.incident_id,
-          type: inc.danger_category?.toLowerCase() === 'critical' ? 'critical' : 'warning',
-          message: inc.incident_type,
-          time: new Date(inc.timestamp).toLocaleTimeString(),
-          // Passing the whole response item so nested camera/zone can resolve properly
-          details: buildEventMessage(inc),
-        }));
-        setRecentActivity(mappedActivities);
-      })
-      .catch(err => console.error("Error loading incidents flow:", err));
+    // ✅ Optional: Wait for all requests to complete (for analytics or cleanup)
+    Promise.allSettled(requests).catch(() => {
+      // Silently handle any errors (already logged above)
+    });
 
   }, [activeCount, totalCameras]);
 
