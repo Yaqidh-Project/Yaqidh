@@ -125,13 +125,14 @@ export const CameraProvider = ({ children }) => {
 
       const video = bgVideosRef.current[id];
       if (!video || video.paused || video.ended) {
-        setTimeout(runLoop, 1500); // Throttled to 1.5s for server safety
+        setTimeout(runLoop, 1500); 
         return;
       }
 
+      // ✅ OPTIMIZED FOR PRODUCTION: Downscale canvas to 416x416 for YOLOv8 efficiency
       const canvas = document.createElement('canvas');
-      canvas.width  = 640;
-      canvas.height = 480;
+      canvas.width  = 416; 
+      canvas.height = 416;
       const ctx = canvas.getContext('2d');
       if (!ctx) { setTimeout(runLoop, 1500); return; }
 
@@ -197,7 +198,6 @@ export const CameraProvider = ({ children }) => {
           }
         }
 
-        // ✅ OPTIMIZED: Throttle loop interval to 1.5 seconds to protect CPU resources on free instances
         if (currentSessionId === sessionIdsRef.current[id]) {
           setTimeout(runLoop, 1500); 
         }
@@ -216,7 +216,6 @@ export const CameraProvider = ({ children }) => {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const videoDevices = devices.filter(d => d.kind === 'videoinput');
 
-      // ✅ PRODUCTION-READY: Robust ideal constraints eliminating OverconstrainedError
       let constraints = { 
         video: { 
           width: { ideal: 1280 }, 
@@ -234,7 +233,6 @@ export const CameraProvider = ({ children }) => {
               d.label.toLowerCase().includes('built-in') ||
               d.label.toLowerCase().includes('webcam')
           );
-          // ✅ FIX: Swapped exact with ideal to prevent browser security locks on Vercel deployment
           constraints.video.deviceId = builtInCam
             ? { ideal: builtInCam.deviceId }
             : { ideal: videoDevices[0].deviceId };
