@@ -27,31 +27,19 @@ def _create_engine():
     settings = get_settings()
     db_url = _normalize_db_url(settings.DATABASE_URL)
     
-    # ✅ PRODUCTION-READY: Optimized connection pooling for async operations
-    # - pool_size: 10 connections per worker (adjust based on worker count)
-    # - max_overflow: 20 additional connections during traffic spikes
-    # - pool_pre_ping: Validates connections before reuse (detects stale connections)
-    # - pool_recycle: Recycle connections every 3600 seconds (prevents timeout issues)
-    # - NullPool for Render/serverless: Prevents connection leaks on function restarts
-    
     is_production = settings.IS_PRODUCTION
     
     if is_production:
-        # ✅ RENDER.COM DEPLOYMENT: Use NullPool to prevent connection persistence
-        # Render runs on ephemeral containers that may restart without warning.
-        # NullPool ensures every request gets a fresh connection.
         return create_async_engine(
             db_url,
             echo=settings.ECHO_SQL,
-            poolclass=NullPool,  # Don't pool connections in serverless
+            poolclass=NullPool,  
             connect_args={"server_settings": {"application_name": "yaqidh-api"}},
         )
     else:
-        # ✅ LOCAL DEVELOPMENT: Use QueuePool for connection reuse
         return create_async_engine(
             db_url,
             echo=settings.ECHO_SQL,
-            poolclass=QueuePool,
             pool_pre_ping=True,
             pool_size=10,
             max_overflow=20,
