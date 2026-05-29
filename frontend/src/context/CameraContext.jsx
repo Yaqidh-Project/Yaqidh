@@ -233,21 +233,31 @@ export const CameraProvider = ({ children }) => {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const videoDevices = devices.filter(d => d.kind === 'videoinput');
 
-      let constraints = { video: { width: 1280, height: 720 }, audio: false };
+      // ✅ PRODUCTION-READY: Set flexible resolution constraints using 'ideal' instead of 'exact'
+      let constraints = { 
+        video: { 
+          width: { ideal: 1280 }, 
+          height: { ideal: 720 },
+          facingMode: "user"
+        }, 
+        audio: false 
+      };
 
       if (videoDevices.length > 0) {
         if (index === 0) {
           const builtInCam = videoDevices.find(
             d =>
               d.label.toLowerCase().includes('integrated') ||
-              d.label.toLowerCase().includes('built-in')
+              d.label.toLowerCase().includes('built-in') ||
+              d.label.toLowerCase().includes('webcam')
           );
+          // ✅ FIX: Use 'ideal' configuration to prevent OverconstrainedError on cloud deployments
           constraints.video.deviceId = builtInCam
-            ? { exact: builtInCam.deviceId }
-            : { exact: videoDevices[0].deviceId };
+            ? { ideal: builtInCam.deviceId }
+            : { ideal: videoDevices[0].deviceId };
         } else {
           const targetIndex = index < videoDevices.length ? index : videoDevices.length - 1;
-          constraints.video.deviceId = { exact: videoDevices[targetIndex].deviceId };
+          constraints.video.deviceId = { ideal: videoDevices[targetIndex].deviceId };
         }
       }
 
@@ -276,7 +286,7 @@ export const CameraProvider = ({ children }) => {
         }
       };
 
-      mediaRecorder.start(500); // 500 ms slices → ~3 s minimum before next harvest
+      mediaRecorder.start(500); // 500 ms slices
       mediaRecordersRef.current[id] = mediaRecorder;
 
       if (uiVideoElement) uiVideoElement.srcObject = stream;
