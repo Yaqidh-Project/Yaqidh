@@ -38,6 +38,9 @@ async def send_incident_email(
     
     from app.templates.email_templates import get_incident_email_html
     
+    # ✅ Teachers should NOT see clip link
+    clip_url_for_email = None if user_role == "Teacher" else incident_clip_url
+    
     html_body = get_incident_email_html(
         user_role=user_role,
         incident_type=incident_type,
@@ -47,7 +50,7 @@ async def send_incident_email(
         zone_name=zone_name,
         timestamp_str=timestamp_str,
         confidence_pct=confidence_pct,
-        incident_clip_url=incident_clip_url
+        incident_clip_url=clip_url_for_email
     )
     
     body = html_body
@@ -74,4 +77,53 @@ async def send_incident_email(
     
     except Exception as e:
         logger.error(f"Failed to send email to {email_recipient}: {str(e)}")
+        return False
+
+
+async def send_otp_email(
+    user_email: str,
+    user_name: str,
+    otp_code: str,
+    expiry_minutes: int = 10
+) -> bool:
+    """
+    Send OTP verification code via email.
+    """
+    settings = get_settings()
+    
+    email_recipient = user_email
+    logger.info(f"[OTP EMAIL] Sending OTP to {email_recipient}")
+    
+    subject = f"🔐 Yaqidh Verification Code: {otp_code}"
+    
+    from app.templates.email_templates import get_otp_email_html
+    
+    html_body = get_otp_email_html(
+        user_name=user_name,
+        otp_code=otp_code,
+        expiry_minutes=expiry_minutes
+    )
+    
+    try:
+        async with aiosmtplib.SMTP(
+            hostname=settings.SMTP_HOST, 
+            port=settings.SMTP_PORT, 
+            start_tls=True
+        ) as smtp:
+            await smtp.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = settings.SENDER_EMAIL
+            msg["To"] = email_recipient
+            
+            msg.attach(MIMEText(html_body, "html"))
+            
+            await smtp.sendmail(settings.SENDER_EMAIL, email_recipient, msg.as_string())
+        
+        logger.info(f"[OTP EMAIL] ✅ OTP email sent to {email_recipient}")
+        return True
+    
+    except Exception as e:
+        logger.error(f"[OTP EMAIL] ❌ Failed to send OTP email to {email_recipient}: {str(e)}")
         return False
