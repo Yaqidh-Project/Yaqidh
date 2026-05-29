@@ -31,24 +31,20 @@ async def create_zone(
     Creates a new infrastructure monitoring zone and establishes initial ownership bounds.
     Accessible by both Managers and Parents.
     """
+    # Optimized: Initialize the Zone object and map the relationship immediately.
+    # This avoids multiple redundant db.flush() and heavy selectinload queries.
     zone = Zone(zone_name=payload.zone_name)
-    db.add(zone)
-    await db.flush()
-
-    result = await db.execute(
-        select(Zone).options(selectinload(Zone.users)).where(Zone.zone_id == zone.zone_id)
-    )
-    zone_with_relations = result.scalar_one()
+    zone.users.append(current_user)
     
-    if current_user not in zone_with_relations.users:
-        zone_with_relations.users.append(current_user)
-        await db.flush()
-        await db.commit()
-
-    final_result = await db.execute(
-        select(Zone).options(selectinload(Zone.users)).where(Zone.zone_id == zone.zone_id)
-    )
-    return final_result.scalar_one()
+    # Stage the complete entity object into the session context
+    db.add(zone)
+    
+    # Perform a single database roundtrip to commit and persist all changes permanently
+    await db.commit()
+    
+    # Pydantic's ZoneOut schema will automatically extract zone_id and zone_name 
+    # directly from the returned object without needing any extra database fetches.
+    return zone
 
 
 @router.get("", response_model=list[ZoneOut])
@@ -61,6 +57,7 @@ async def list_zones(
     """
     Lists zones assigned strictly to the calling Manager or Parent user context.
     """
+    # Retrieve all zones linked to the current logged-in user using a join on the secondary relation
     result = await db.execute(
         select(Zone)
         .join(Zone.users)
@@ -81,6 +78,7 @@ async def get_zone(
     """
     Retrieves a single zone record enforcing clear security access boundaries.
     """
+    # Fetch the target zone alongside its mapped relationship users
     result = await db.execute(
         select(Zone)
         .options(selectinload(Zone.users))
@@ -90,6 +88,7 @@ async def get_zone(
     if not zone:
         raise HTTPException(status_code=404, detail="Zone not found")
 
+    # Security Boundary Check: Ensure the requested zone actually belongs to the calling user
     assigned_result = await db.execute(
         select(Zone)
         .join(Zone.users)
@@ -105,13 +104,14 @@ async def get_zone(
 async def update_zone(
     zone_id: uuid.UUID,
     payload: ZoneUpdate,
-    current_user: User = Depends(get_current_user),  # Updated: Both Manager and Parent can edit their zones
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Updates configuration data fields metadata inside the specified zone grid.
     Accessible by both Managers and Parents (Data isolation applies).
     """
+    # Load the zone entity from the database
     result = await db.execute(
         select(Zone)
         .options(selectinload(Zone.users))
@@ -125,6 +125,7 @@ async def update_zone(
     if current_user not in zone.users:
         raise HTTPException(status_code=403, detail="Access denied: You do not own this zone")
         
+    # Dynamically map and overwrite modified payload fields onto the target model attributes
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(zone, field, value)
         
@@ -137,13 +138,14 @@ async def update_zone(
 @router.delete("/{zone_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_zone(
     zone_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),  # Updated: Both Manager and Parent can delete their zones
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Deletes an isolated infrastructure zone block map permanently.
     Accessible by both Managers and Parents (Data isolation applies).
     """
+    # Fetch the target zone map
     result = await db.execute(
         select(Zone)
         .options(selectinload(Zone.users))
@@ -157,6 +159,7 @@ async def delete_zone(
     if current_user not in zone.users:
         raise HTTPException(status_code=403, detail="Access denied: You do not own this zone")
         
+    # Remove the entity from database state and commit transaction
     await db.delete(zone)
     await db.commit()
 
@@ -165,13 +168,14 @@ async def delete_zone(
 async def assign_user_to_zone(
     zone_id: uuid.UUID,
     payload: ZoneAssign,
-    current_user: User = Depends(require_roles("Manager")),  # Strict Keep: Restricted exclusively to Managers
+    current_user: User = Depends(require_roles("Manager")),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Maps an authenticated external identity user to a restricted system zone environment.
     Strictly restricted to Managers only. Parents cannot assign users.
     """
+    # Retrieve the specified infrastructure zone record
     result = await db.execute(
         select(Zone).options(selectinload(Zone.users)).where(Zone.zone_id == zone_id)
     )
@@ -179,15 +183,17 @@ async def assign_user_to_zone(
     if not zone:
         raise HTTPException(status_code=404, detail="Zone not found")
 
-    # Verify that the Manager owns this zone before letting them assign anyone to it
+    # Access Authorization Check: Verify that the Manager owns this zone before letting them modify its access rights
     if current_user not in zone.users:
         raise HTTPException(status_code=403, detail="Access denied: You do not own this zone")
 
+    # Fetch the target user identity that needs to be mapped to this monitoring scope
     user_result = await db.execute(select(User).where(User.user_id == payload.user_id))
     user = user_result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # Check to prevent duplicate association rows in the junction tracking table
     if user not in zone.users:
         zone.users.append(user)
         

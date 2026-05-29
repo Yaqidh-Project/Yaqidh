@@ -4,7 +4,7 @@ import random
 import string
 from datetime import datetime, timezone, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import bcrypt
@@ -19,7 +19,6 @@ from app.auth.dependencies import get_current_user
 from app.config import get_settings
 from app.models.enums import UserRole
 from app.schemas.auth import ForgotPasswordRequest
-from fastapi import BackgroundTasks
 from app.schemas.auth import ResetPasswordRequest
 
 
@@ -169,11 +168,15 @@ async def refresh_token(payload: RefreshRequest, db: AsyncSession = Depends(get_
 
 @router.post("/phone/request-code", status_code=status.HTTP_200_OK)
 async def request_phone_code(
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Generates a mock SMS payload verification sequence to establish multi-factor hardware identity.
+    ✅ OPTIMIZED FOR PRODUCTION: Generates OTP and dispatches email in background.
+    
+    The API returns immediately (200 OK) without waiting for SMTP handshake.
+    Email is sent asynchronously via BackgroundTasks, preventing request timeouts.
     """
     if not current_user.phone_number:
         raise HTTPException(
@@ -199,33 +202,22 @@ async def request_phone_code(
     )
     db.add(phone_code)
     await db.flush()
+    await db.commit()
 
-    # ✅ Send OTP via Email
-    from app.services.email import send_otp_email
-    from app.database import AsyncSessionLocal
-    
-    try:
-        # Get user from database to retrieve email
-        user_for_email = current_user
-        user_email = user_for_email.email
-        user_name = user_for_email.full_name
-        
-        # Send OTP via email
-        email_sent = await send_otp_email(
-            user_email=user_email,
-            user_name=user_name,
+    # ✅ CRITICAL FIX: Dispatch email in BACKGROUND, not blocking the response
+    if settings.SMTP_HOST and settings.SMTP_PORT:
+        from app.services.email import send_otp_email
+        background_tasks.add_task(
+            send_otp_email,
+            user_email=current_user.email,
+            user_name=current_user.full_name or "User",
             otp_code=code,
             expiry_minutes=settings.OTP_EXPIRE_MINUTES
         )
-        
-        if email_sent:
-            logger.info(f"✅ OTP email sent to {user_email} (phone: {current_user.phone_number})")
-        else:
-            logger.warning(f"❌ Failed to send OTP email to {user_email}, falling back to MOCK SMS")
-    
-    except Exception as e:
-        logger.error(f"Error sending OTP email: {str(e)}, falling back to MOCK SMS")
-    
+        logger.info(f"✅ OTP email dispatch queued for {current_user.email}")
+    else:
+        logger.warning("⚠️ SMTP not configured. Email will not be sent.")
+
     # ✅ KEEP MOCK SMS AS BACKUP (for testing if email fails)
     logger.info(
         f"[MOCK SMS] Sending OTP {code} to {current_user.phone_number} "
