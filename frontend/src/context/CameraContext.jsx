@@ -52,16 +52,6 @@ export const CameraProvider = ({ children }) => {
     localStorage.setItem(`camera_active_${id}`, 'false');
   };
 
-  /**
-   * Returns a Promise that resolves with a finalized video Blob.
-   *
-   * Strategy: stop the current recorder (which flushes all buffered data and
-   * fires the final `dataavailable` event), collect the result, then
-   * immediately spin up a fresh recorder so the next cycle has clean chunks.
-   *
-   * MIN_CHUNKS: wait until at least this many 500ms slices are buffered
-   * before harvesting, giving ~3 seconds of footage minimum.
-   */
   const MIN_CHUNKS = 3; // 3 × 500 ms = ~1.5 seconds
 
   const _harvestClip = (id) => {
@@ -74,16 +64,13 @@ export const CameraProvider = ({ children }) => {
         return;
       }
 
-      // Not enough footage yet — skip this cycle, keep recording
       if ((recordedChunksRef.current[id] || []).length < MIN_CHUNKS) {
         resolve(null);
         return;
       }
 
-      // Collect whatever is already buffered
       const existingChunks = [...(recordedChunksRef.current[id] || [])];
 
-      // Listen for the final chunk that arrives when we call .stop()
       const onStop = () => {
         recorder.removeEventListener('stop', onStop);
 
@@ -95,7 +82,6 @@ export const CameraProvider = ({ children }) => {
           resolve(new Blob(allChunks, { type: 'video/webm' }));
         }
 
-        // ── Restart a fresh recorder immediately ──────────────────────────
         try {
           recordedChunksRef.current[id] = [];
           const fresh = new MediaRecorder(stream, { mimeType: 'video/webm' });
@@ -104,14 +90,13 @@ export const CameraProvider = ({ children }) => {
             if (e.data.size > 0) {
               recordedChunksRef.current[id] = recordedChunksRef.current[id] || [];
               recordedChunksRef.current[id].push(e.data);
-              // Keep a rolling ~20-second window (1 chunk/s × 20)
               if (recordedChunksRef.current[id].length > 20) {
                 recordedChunksRef.current[id].shift();
               }
             }
           };
 
-          fresh.start(500); // 500 ms slices → ~3 s minimum before next harvest
+          fresh.start(500); 
           mediaRecordersRef.current[id] = fresh;
         } catch (e) {
           console.warn('Could not restart MediaRecorder:', e);
@@ -120,10 +105,9 @@ export const CameraProvider = ({ children }) => {
 
       recorder.addEventListener('stop', onStop);
 
-      // Grab any data buffered since the last timeslice, then stop
       try {
-        recorder.requestData(); // flush current buffer → ondataavailable fires
-        recorder.stop();        // triggers final dataavailable + stop events
+        recorder.requestData(); 
+        recorder.stop();        
       } catch (e) {
         recorder.removeEventListener('stop', onStop);
         resolve(null);
@@ -141,7 +125,7 @@ export const CameraProvider = ({ children }) => {
 
       const video = bgVideosRef.current[id];
       if (!video || video.paused || video.ended) {
-        setTimeout(runLoop, 300);
+        setTimeout(runLoop, 1500); // Throttled to 1.5s for server safety
         return;
       }
 
@@ -149,19 +133,18 @@ export const CameraProvider = ({ children }) => {
       canvas.width  = 640;
       canvas.height = 480;
       const ctx = canvas.getContext('2d');
-      if (!ctx) { setTimeout(runLoop, 300); return; }
+      if (!ctx) { setTimeout(runLoop, 1500); return; }
 
       try {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       } catch (e) {
-        setTimeout(runLoop, 300);
+        setTimeout(runLoop, 1500);
         return;
       }
 
       canvas.toBlob(async (frameBlob) => {
         if (currentSessionId !== sessionIdsRef.current[id] || !frameBlob) return;
 
-        // ── Harvest a finalized clip before building the request ──────────
         const clipBlob = await _harvestClip(id);
 
         if (currentSessionId !== sessionIdsRef.current[id]) return;
@@ -171,7 +154,6 @@ export const CameraProvider = ({ children }) => {
         formData.append('frame', frameBlob, `live_frame_${id}.jpg`);
 
         if (clipBlob && clipBlob.size > 0) {
-          // Explicit filename + MIME type so the backend sees video/webm
           formData.append('clip', clipBlob, `incident_${id}.webm`);
         }
 
@@ -215,13 +197,14 @@ export const CameraProvider = ({ children }) => {
           }
         }
 
+        // ✅ OPTIMIZED: Throttle loop interval to 1.5 seconds to protect CPU resources on free instances
         if (currentSessionId === sessionIdsRef.current[id]) {
-          setTimeout(runLoop, 300);
+          setTimeout(runLoop, 1500); 
         }
       }, 'image/jpeg', 0.7);
     };
 
-    setTimeout(runLoop, 300);
+    setTimeout(runLoop, 1500);
   };
 
   const startCameraPipeline = async (id, name, index, uiVideoElement) => {
@@ -233,7 +216,7 @@ export const CameraProvider = ({ children }) => {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const videoDevices = devices.filter(d => d.kind === 'videoinput');
 
-      // ✅ PRODUCTION-READY: Set flexible resolution constraints using 'ideal' instead of 'exact'
+      // ✅ PRODUCTION-READY: Robust ideal constraints eliminating OverconstrainedError
       let constraints = { 
         video: { 
           width: { ideal: 1280 }, 
@@ -251,7 +234,7 @@ export const CameraProvider = ({ children }) => {
               d.label.toLowerCase().includes('built-in') ||
               d.label.toLowerCase().includes('webcam')
           );
-          // ✅ FIX: Use 'ideal' configuration to prevent OverconstrainedError on cloud deployments
+          // ✅ FIX: Swapped exact with ideal to prevent browser security locks on Vercel deployment
           constraints.video.deviceId = builtInCam
             ? { ideal: builtInCam.deviceId }
             : { ideal: videoDevices[0].deviceId };
@@ -264,7 +247,6 @@ export const CameraProvider = ({ children }) => {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamsRef.current[id] = stream;
 
-      // Hidden background video for canvas capture
       const bgVideo = document.createElement('video');
       bgVideo.setAttribute('autoplay', 'true');
       bgVideo.setAttribute('playsinline', 'true');
@@ -273,7 +255,6 @@ export const CameraProvider = ({ children }) => {
       bgVideosRef.current[id] = bgVideo;
       await bgVideo.play();
 
-      // ── MediaRecorder: 1-second timeslices, rolling 20-chunk buffer ───────
       recordedChunksRef.current[id] = [];
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
 
@@ -286,7 +267,7 @@ export const CameraProvider = ({ children }) => {
         }
       };
 
-      mediaRecorder.start(500); // 500 ms slices
+      mediaRecorder.start(500); 
       mediaRecordersRef.current[id] = mediaRecorder;
 
       if (uiVideoElement) uiVideoElement.srcObject = stream;
@@ -296,7 +277,6 @@ export const CameraProvider = ({ children }) => {
 
       spawnFrameLoop(id, freshSessionId, name);
 
-      // ── WebSocket for server-push incident notifications ──────────────────
       const token = localStorage.getItem('token');
       const wsUrl = `${import.meta.env.VITE_WS_BASE_URL}/ws/notifications?token=${token}`;
       const ws    = new WebSocket(wsUrl);

@@ -6,10 +6,10 @@ const axiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // ✅ 30-second timeout prevents hanging requests
+  timeout: 60000, // 60-second timeout prevents hanging requests
 });
 
-// ✅ REQUEST INTERCEPTOR: Inject JWT token + timeout handling
+// REQUEST INTERCEPTOR: Inject JWT token + timeout handling
 axiosInstance.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
