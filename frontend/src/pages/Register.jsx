@@ -40,44 +40,35 @@ export default function Register() {
   };
 
   const handleRegister = async (e) => {
-  e.preventDefault();
-  setError('');
+    e.preventDefault();
+    setError('');
 
-  if (!validateForm()) return;
-  setLoading(true);
+    if (!validateForm()) return;
+    setLoading(true);
 
-  try {
-    // ✅ OPTIMIZED: Single registration request
-    const response = await axiosInstance.post('/auth/register', {
-      full_name: formData.fullName,
-      email: formData.email,
-      password: formData.password,
-      phone_number: formData.phone,
-      role_name: formData.role, 
-      notification_prefs: { sms: true, email: true, app: true }
-    });
-
-    // ✅ Store token immediately
-    localStorage.setItem('token', response.data.access_token);
-    
-    // ✅ OPTIMIZED: Dispatch OTP request in background (don't block UI)
-    axiosInstance.post('/auth/phone/request-code')
-      .then(() => {
-        console.log('✅ OTP dispatch queued after registration');
-      })
-      .catch((err) => {
-        console.error('⚠️ OTP request failed (user can request manually):', err);
+    try {
+      const response = await axiosInstance.post('/auth/register', {
+        full_name: formData.fullName,
+        email: formData.email,
+        password: formData.password,
+        phone_number: formData.phone,
+        role_name: formData.role, 
+        notification_prefs: { sms: true, email: true, app: true }
       });
-    
-    // ✅ Instantly advance to the OTP step without any network lag
-    setStep(2);
-  } catch (err) {
-    console.error(err);
-    setError(err.response?.data?.detail || 'Registration failed. Please try again.');
-  } finally {
-    setLoading(false);
-  }
-};
+
+      localStorage.setItem('token', response.data.access_token);
+      
+      await axiosInstance.post(`/auth/signup/request-otp?phone_number=${encodeURIComponent(formData.phone)}`);
+      console.log('✅ OTP sent successfully to email!');
+      
+      setStep(2);
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.detail || 'Registration failed. Please try again.');
+    } finally {
+      loading(false);
+    }
+  };
 
   const handleVerifyPhone = async (e) => {
     e.preventDefault();
@@ -90,10 +81,8 @@ export default function Register() {
     setLoading(true);
 
     try {
-      // Send code challenge to activate and verify the phone number scope constraints
-      await axiosInstance.post(`/auth/phone/verify-code?code=${verificationCode}`);
+      await axiosInstance.post(`/auth/signup/verify-otp?phone_number=${encodeURIComponent(formData.phone)}&code=${verificationCode}`);
       
-      // Store user metadata locally and redirect to root page
       localStorage.setItem('user', JSON.stringify({ email: formData.email, role: formData.role.toLowerCase() }));
       window.location.href = '/';
     } catch (err) {
