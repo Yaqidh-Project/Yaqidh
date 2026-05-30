@@ -4,7 +4,7 @@ import random
 import string
 from datetime import datetime, timezone, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import bcrypt
@@ -19,6 +19,7 @@ from app.auth.dependencies import get_current_user
 from app.config import get_settings
 from app.models.enums import UserRole
 from app.schemas.auth import ForgotPasswordRequest
+from fastapi import BackgroundTasks
 from app.schemas.auth import ResetPasswordRequest
 
 
@@ -46,9 +47,10 @@ def _verify_password(plain: str, hashed: str) -> bool:
 
 def _generate_otp(length: int = 6) -> str:
     """
-    Generates a secure cryptographically random numeric string sequence for multi-factor SMS auth.
+    Generates a secure cryptographically random numeric string sequence for multi-factor auth.
     """
     return "".join(random.choices(string.digits, k=length))
+
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)):
@@ -70,6 +72,11 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == payload.email))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Email already registered")
+
+    # Check if phone number already registered
+    result = await db.execute(select(User).where(User.phone_number == payload.phone_number))
+    if result.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Phone number already registered")
 
     # Construct and persist new domain tracking account entity
     user = User(
@@ -166,17 +173,275 @@ async def refresh_token(payload: RefreshRequest, db: AsyncSession = Depends(get_
     )
 
 
+# ============================================================================
+# 🆕 NEW: OTP SIGNUP FLOW (No authentication required)
+# ============================================================================
+
+@router.post("/signup/request-otp", status_code=status.HTTP_200_OK)
+async def signup_request_otp(
+    phone_number: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Request OTP during registration (NO LOGIN REQUIRED).
+    Searches for user by phone number and sends OTP via email.
+    """
+    # Find user by phone number
+    result = await db.execute(
+        select(User).where(User.phone_number == phone_number)
+    )
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Phone number not found. Please register first.",
+        )
+    
+    # Check if phone is already verified
+    if user.phone_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Phone number is already verified.",
+        )
+
+    # ✅ Invalidate any existing unused codes for this user
+    await db.execute(
+        PhoneVerificationCode.__table__.delete().where(
+            PhoneVerificationCode.user_id == user.user_id,
+            PhoneVerificationCode.used.is_(False),
+        )
+    )
+    await db.commit()
+
+    # Generate OTP
+    code = _generate_otp()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_EXPIRE_MINUTES)
+    
+    # Save OTP to database
+    phone_code = PhoneVerificationCode(
+        user_id=user.user_id,
+        code=code,
+        expires_at=expires_at,
+        used=False,
+    )
+    db.add(phone_code)
+    await db.flush()
+    await db.commit()
+
+    # ✅ Send OTP via Email
+    from app.services.email import send_otp_email
+    
+    try:
+        email_sent = await send_otp_email(
+            user_email=user.email,
+            user_name=user.full_name,
+            otp_code=code,
+            expiry_minutes=settings.OTP_EXPIRE_MINUTES
+        )
+        
+        if email_sent:
+            logger.info(f"✅ OTP email sent to {user.email} (phone: {phone_number})")
+        else:
+            logger.warning(f"❌ Failed to send OTP email to {user.email}, using MOCK SMS")
+    
+    except Exception as e:
+        logger.error(f"❌ Error sending OTP email: {str(e)}, using MOCK SMS")
+    
+    # ✅ MOCK SMS as Backup (for development/testing)
+    logger.info(
+        f"[MOCK SMS] Sending OTP {code} to {phone_number} "
+        f"(user={user.user_id}, expires={expires_at.isoformat()})"
+    )
+    print(
+        f"\n{'='*50}\n"
+        f"[MOCK SMS - BACKUP] To: {phone_number}\n"
+        f"Your Yaqidh verification code is: {code}\n"
+        f"It expires in {settings.OTP_EXPIRE_MINUTES} minutes.\n"
+        f"{'='*50}\n"
+    )
+
+    return {
+        "message": f"Verification code sent to your email and phone {phone_number}.",
+        "expires_in_minutes": settings.OTP_EXPIRE_MINUTES,
+    }
+
+
+@router.post("/signup/resend-otp", status_code=status.HTTP_200_OK)
+async def signup_resend_otp(
+    phone_number: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Resend OTP during registration (NO LOGIN REQUIRED).
+    Allows users to request a new OTP code if the previous one expired.
+    """
+    # Find user by phone number
+    result = await db.execute(
+        select(User).where(User.phone_number == phone_number)
+    )
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Phone number not found. Please register first.",
+        )
+    
+    if user.phone_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Phone number is already verified.",
+        )
+
+    # Check if there's a recent unused OTP (within last 2 minutes)
+    now = datetime.now(timezone.utc)
+    two_minutes_ago = now - timedelta(minutes=2)
+    
+    result = await db.execute(
+        select(PhoneVerificationCode).where(
+            PhoneVerificationCode.user_id == user.user_id,
+            PhoneVerificationCode.used.is_(False),
+            PhoneVerificationCode.created_at > two_minutes_ago,  # ← Assuming created_at field exists
+        )
+    )
+    recent_code = result.scalar_one_or_none()
+    
+    if recent_code:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Please wait 2 minutes before requesting a new code.",
+        )
+
+    # Delete old unused codes
+    await db.execute(
+        PhoneVerificationCode.__table__.delete().where(
+            PhoneVerificationCode.user_id == user.user_id,
+            PhoneVerificationCode.used.is_(False),
+        )
+    )
+    await db.commit()
+
+    # Generate new OTP
+    code = _generate_otp()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_EXPIRE_MINUTES)
+    
+    # Save OTP to database
+    phone_code = PhoneVerificationCode(
+        user_id=user.user_id,
+        code=code,
+        expires_at=expires_at,
+        used=False,
+    )
+    db.add(phone_code)
+    await db.flush()
+    await db.commit()
+
+    # ✅ Send OTP via Email
+    from app.services.email import send_otp_email
+    
+    try:
+        email_sent = await send_otp_email(
+            user_email=user.email,
+            user_name=user.full_name,
+            otp_code=code,
+            expiry_minutes=settings.OTP_EXPIRE_MINUTES
+        )
+        
+        if email_sent:
+            logger.info(f"✅ OTP email RESENT to {user.email} (phone: {phone_number})")
+        else:
+            logger.warning(f"❌ Failed to resend OTP email to {user.email}, using MOCK SMS")
+    
+    except Exception as e:
+        logger.error(f"❌ Error resending OTP email: {str(e)}, using MOCK SMS")
+    
+    # ✅ MOCK SMS as Backup
+    logger.info(f"[MOCK SMS - RESEND] Sending OTP {code} to {phone_number}")
+    print(
+        f"\n{'='*50}\n"
+        f"[MOCK SMS - RESEND] To: {phone_number}\n"
+        f"Your Yaqidh verification code is: {code}\n"
+        f"It expires in {settings.OTP_EXPIRE_MINUTES} minutes.\n"
+        f"{'='*50}\n"
+    )
+
+    return {
+        "message": f"New verification code sent to your email and phone {phone_number}.",
+        "expires_in_minutes": settings.OTP_EXPIRE_MINUTES,
+    }
+
+
+@router.post("/signup/verify-otp", response_model=UserOut)
+async def signup_verify_otp(
+    phone_number: str,
+    code: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Verify OTP during signup (NO LOGIN REQUIRED).
+    Validates the code and marks phone as verified.
+    """
+    # Find user by phone number
+    result = await db.execute(
+        select(User).where(User.phone_number == phone_number)
+    )
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Phone number not found.",
+        )
+    
+    if user.phone_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Phone is already verified.",
+        )
+
+    # Validate OTP
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(PhoneVerificationCode).where(
+            PhoneVerificationCode.user_id == user.user_id,
+            PhoneVerificationCode.code == code,
+            PhoneVerificationCode.used.is_(False),
+            PhoneVerificationCode.expires_at > now,
+        )
+    )
+    phone_code = result.scalar_one_or_none()
+    
+    if not phone_code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification code.",
+        )
+
+    # Mark code as used and phone as verified
+    phone_code.used = True
+    user.phone_verified = True
+    await db.flush()
+    await db.refresh(user)
+    await db.commit()
+
+    logger.info(f"✅ Phone verified successfully for user {user.user_id} ({user.email})")
+    
+    return user
+
+
+# ============================================================================
+# 🔐 EXISTING: PHONE VERIFICATION AFTER LOGIN (requires authentication)
+# ============================================================================
+
 @router.post("/phone/request-code", status_code=status.HTTP_200_OK)
 async def request_phone_code(
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    ✅ OPTIMIZED FOR PRODUCTION: Generates OTP and dispatches email in background.
-    
-    The API returns immediately (200 OK) without waiting for SMTP handshake.
-    Email is sent asynchronously via BackgroundTasks, preventing request timeouts.
+    Request phone verification code after login (REQUIRES AUTHENTICATION).
+    Used for additional security verification after user is already logged in.
     """
     if not current_user.phone_number:
         raise HTTPException(
@@ -184,14 +449,16 @@ async def request_phone_code(
             detail="No phone number on your account. Update your profile first.",
         )
 
-    # Invalidate and flush any stale or unused codes tracking this account identity
+    # Invalidate any stale or unused codes
     await db.execute(
         PhoneVerificationCode.__table__.delete().where(
             PhoneVerificationCode.user_id == current_user.user_id,
             PhoneVerificationCode.used.is_(False),
         )
     )
+    await db.commit()
 
+    # Generate code
     code = _generate_otp()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_EXPIRE_MINUTES)
     phone_code = PhoneVerificationCode(
@@ -204,21 +471,26 @@ async def request_phone_code(
     await db.flush()
     await db.commit()
 
-    # ✅ CRITICAL FIX: Dispatch email in BACKGROUND, not blocking the response
-    if settings.SMTP_HOST and settings.SMTP_PORT:
-        from app.services.email import send_otp_email
-        background_tasks.add_task(
-            send_otp_email,
+    # ✅ Send OTP via Email
+    from app.services.email import send_otp_email
+    
+    try:
+        email_sent = await send_otp_email(
             user_email=current_user.email,
-            user_name=current_user.full_name or "User",
+            user_name=current_user.full_name,
             otp_code=code,
             expiry_minutes=settings.OTP_EXPIRE_MINUTES
         )
-        logger.info(f"✅ OTP email dispatch queued for {current_user.email}")
-    else:
-        logger.warning("⚠️ SMTP not configured. Email will not be sent.")
-
-    # ✅ KEEP MOCK SMS AS BACKUP (for testing if email fails)
+        
+        if email_sent:
+            logger.info(f"✅ OTP email sent to {current_user.email} (phone: {current_user.phone_number})")
+        else:
+            logger.warning(f"❌ Failed to send OTP email to {current_user.email}, using MOCK SMS")
+    
+    except Exception as e:
+        logger.error(f"❌ Error sending OTP email: {str(e)}, using MOCK SMS")
+    
+    # ✅ MOCK SMS as Backup
     logger.info(
         f"[MOCK SMS] Sending OTP {code} to {current_user.phone_number} "
         f"(user={current_user.user_id}, expires={expires_at.isoformat()})"
@@ -244,7 +516,7 @@ async def verify_phone_code(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Validates the hardware code payload challenge to activate permissions access.
+    Verify phone code after login (REQUIRES AUTHENTICATION).
     """
     now = datetime.now(timezone.utc)
     result = await db.execute(
@@ -263,15 +535,20 @@ async def verify_phone_code(
             detail="Invalid or expired verification code.",
         )
 
-    # Set state transitions and flags inside persistence storage contexts
+    # Mark as used and phone as verified
     phone_code.used = True
     current_user.phone_verified = True
     await db.flush()
     await db.refresh(current_user)
     await db.commit()
 
-    logger.info(f"Phone verified successfully for user {current_user.user_id}")
+    logger.info(f"✅ Phone verified successfully for user {current_user.user_id}")
     return current_user
+
+
+# ============================================================================
+# PASSWORD RECOVERY
+# ============================================================================
 
 @router.post("/forgot-password")
 async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
@@ -296,7 +573,6 @@ async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Dep
         "message": "Recovery protocol successfully executed. Check terminal log for secure recovery tokens."
     }
 
-# Instantiate a direct standalone encryption pipeline matching your environment's hashing rules
 
 @router.post("/reset-password")
 async def reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
