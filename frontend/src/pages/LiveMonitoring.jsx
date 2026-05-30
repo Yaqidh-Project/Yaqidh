@@ -192,14 +192,21 @@ export default function LiveMonitoring() {
             ⚠️ No active cameras registered.
           </div>
         ) : (
-          <div className={`grid gap-8 transition-all duration-500 ${viewMode === 'all' && cameras.length > 1 ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1 max-w-4xl mx-auto'
+          <div className={`grid gap-8 transition-all duration-500 ${viewMode === 'all' && cameras.length > 1 ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1 max-w-6xl mx-auto'
             }`}>
-            {cameras
-              .filter(cam => viewMode === 'all' || viewMode === cam.id)
-              .map((cam, idx) => (
-                <CameraFeed key={cam.id} id={cam.id} name={cam.name} index={idx} />
-              ))
-            }
+            {cameras.map((cam, originalIdx) => {
+              // Only render the camera if viewMode is 'all' OR matches the specific camera id
+              if (viewMode !== 'all' && viewMode !== cam.id) return null;
+
+              return (
+                <CameraFeed 
+                  key={cam.id} 
+                  id={cam.id} 
+                  name={cam.name} 
+                  index={originalIdx} 
+                />
+              );
+            })}
           </div>
         )}
       </main>
