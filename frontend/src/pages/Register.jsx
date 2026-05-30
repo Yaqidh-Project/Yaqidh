@@ -66,7 +66,7 @@ export default function Register() {
       console.error(err);
       setError(err.response?.data?.detail || 'Registration failed. Please try again.');
     } finally {
-      loading(false);
+      setLoading(false);
     }
   };
 
