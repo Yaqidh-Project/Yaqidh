@@ -48,13 +48,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-origins = ["*"]
+origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://yaqidh.vercel.app",  
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=False,  
-    allow_methods=["*"],          
+    allow_origins=origins,     
+    allow_credentials=True,    
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
