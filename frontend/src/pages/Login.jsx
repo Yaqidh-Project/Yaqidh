@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Mail, Lock, ArrowRight } from 'lucide-react';
 import axiosInstance from '../api/axiosInstance';
 
@@ -11,6 +11,10 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const isRegisteredSuccess = queryParams.get('registered') === 'success';
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -93,6 +97,13 @@ export default function Login() {
           <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest mt-1">Sign in to your account</p>
         </div>
 
+        {/* Global Registration Success Banner Block */}
+        {isRegisteredSuccess && (
+          <div className="mb-2 p-4 bg-emerald-600 rounded-2xl text-white text-xs font-black text-center shadow-xl shadow-emerald-600/20 raw-uppercase tracking-wide">
+            ACCOUNT ACTIVATED SUCCESSFULLY! PLEASE LOG IN WITH YOUR CREDENTIALS.
+          </div>
+        )}
+
         <div className="bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100">
           {error && (
             <div className="mb-6 p-4 bg-red-600 rounded-2xl text-white text-xs font-black text-center">
@@ -123,6 +134,16 @@ export default function Login() {
                 placeholder="Password"
                 className="w-full pl-12 pr-4 py-4 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none font-medium"
               />
+            </div>
+
+            {/* Password Recovery Pipeline Link */}
+            <div className="flex justify-end pt-1">
+              <Link 
+                to="/forgot-password" 
+                className="text-xs font-bold uppercase tracking-wider text-slate-400 hover:text-brand-500 transition-colors duration-200"
+              >
+                Forgot Password?
+              </Link>
             </div>
 
             <button

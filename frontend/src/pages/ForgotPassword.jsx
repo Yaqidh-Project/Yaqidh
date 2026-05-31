@@ -24,18 +24,16 @@ export default function ForgotPassword() {
     setLoading(true);
 
     try {
-      // Dispatch password recovery request directly to FastAPI auth router
       await axiosInstance.post('/auth/forgot-password', {
         email: email
       });
 
-      setMessage(`If an active account exists for ${email}, a password reset link has been dispatched.`);
+      setMessage(`Account verified. Redirecting you to the password reset page...`);
       setEmail('');
 
-      // Route the user to /reset-password
       setTimeout(() => {
         navigate('/reset-password', { state: { email: email } });
-      }, 3000);
+      }, 2000); 
 
     } catch (err) {
       console.error("Password recovery pipeline failure:", err);
@@ -63,7 +61,7 @@ export default function ForgotPassword() {
              />
           </div>
           <h1 className="text-3xl font-bold text-slate-800 mt-4 tracking-tight">Forgot Password</h1>
-          <p className="text-slate-500 mt-2 text-sm">Enter your registered email address below, and we will transmit a secure access reset link pipeline.</p>
+          <p className="text-slate-500 mt-2 text-sm">Enter your registered email address below.</p>
         </div>
 
         <div className="bg-white rounded-3xl shadow-xl p-8 border border-slate-100">
