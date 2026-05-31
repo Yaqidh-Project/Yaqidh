@@ -59,7 +59,7 @@ async def send_incident_email(
         async with aiosmtplib.SMTP(
             hostname=settings.SMTP_HOST, 
             port=settings.SMTP_PORT, 
-            start_tls=True
+            use_tls=True
         ) as smtp:
             await smtp.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
             
@@ -108,7 +108,7 @@ async def send_otp_email(
         async with aiosmtplib.SMTP(
             hostname=settings.SMTP_HOST, 
             port=settings.SMTP_PORT, 
-            start_tls=True
+            use_tls=True
         ) as smtp:
             await smtp.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
             
