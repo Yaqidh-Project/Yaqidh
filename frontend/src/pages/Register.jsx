@@ -61,7 +61,7 @@ export default function Register() {
       console.error(err);
       setError(err.response?.data?.detail || 'Registration failed. Please try again.');
     } finally {
-      loading(false);
+      setLoading(false);
     }
   };
 
@@ -69,6 +69,7 @@ export default function Register() {
     e.preventDefault();
     setError('');
 
+    // Validate that the verification code input is not empty
     if (!verificationCode) {
       setError('Please enter the 6-digit verification code');
       return;
@@ -76,20 +77,16 @@ export default function Register() {
     setLoading(true);
 
     try {
+      // Send the OTP verification code and phone number to the backend API 
       const response = await axiosInstance.post(`/auth/signup/verify-otp?phone_number=${formData.phone}&code=${verificationCode}`);
+      navigate('/login?registered=success');
       
-      if (response.data && response.data.access_token) {
-        localStorage.setItem('token', response.data.access_token);
-        axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`;
-      }
-      
-      localStorage.setItem('user', JSON.stringify({ email: formData.email, role: formData.role.toLowerCase() }));
-      window.location.href = '/';
     } catch (err) {
       console.error(err);
+      // Set the error message to be displayed on the UI
       setError(err.response?.data?.detail || 'Invalid or expired code.');
     } finally {
-      loading(false);
+      setLoading(false);
     }
   };
 
