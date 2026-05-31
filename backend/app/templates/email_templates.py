@@ -9,11 +9,6 @@ def get_incident_email_html(
     confidence_pct: float,
     incident_clip_url: str = None
 ) -> str:
-    video_section = (
-        f'📹 <a href="{incident_clip_url}" style="color: #d32f2f; font-weight: bold; text-decoration: underline;">View Video Clip</a>'
-        if incident_clip_url
-        else "Video clip will be available shortly in the dashboard."
-    )
     
     html_body = f"""<!DOCTYPE html>
 <html lang="en">
@@ -34,7 +29,6 @@ def get_incident_email_html(
         .detail-row:last-child {{ border-bottom: none; padding-bottom: 0; }}
         .detail-label {{ font-weight: bold; display: inline-block; width: 150px; color: #333; vertical-align: top; }}
         .detail-value {{ display: inline-block; color: #555; vertical-align: top; }}
-        .video-section {{ text-align: center; padding: 18px; background: #f9f9f9; border: 1px dashed #d32f2f; border-radius: 6px; margin: 25px 0; font-size: 14px; color: #444; }}
         .action-required {{ background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 0 4px 4px 0; margin: 20px 0; font-weight: bold; color: #856404; font-size: 13px; line-height: 1.5; }}
         .footer {{ background: #f9f9f9; padding: 25px; text-align: center; font-size: 12px; color: #888; border-top: 1px solid #eee; }}
         .footer p {{ margin: 6px 0; }}
@@ -79,10 +73,6 @@ def get_incident_email_html(
                     <span class="detail-label">📊 Confidence:</span>
                     <span class="detail-value" style="font-weight: 600;">{confidence_pct:.1f}%</span>
                 </div>
-            </div>
-            
-            <div class="video-section">
-                {video_section}
             </div>
             
             <div class="action-required">

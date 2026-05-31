@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 # Per-user, per-incident-type cooldowns (in seconds)
 INCIDENT_COOLDOWNS = {
-    "fall": 10,
-    "violence": 20,
+    "fall": 0,
+    "violence": 0,
 }
 
 # Cooldown tracking: {(user_id, camera_id, incident_type): last_notification_time}
