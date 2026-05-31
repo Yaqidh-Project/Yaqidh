@@ -126,6 +126,7 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)):
 
 @router.post("/login")
 async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
+    # STEP 1: Check if user exists
     result = await db.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
     
@@ -134,69 +135,83 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Account does not exist. Please register first.",
         )
-        
+    
+    # STEP 2: Verify password BEFORE any other operations
     if not _verify_password(payload.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password. Please try again.",
         )
-        
+    
+    # STEP 3: Check if account is active
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Account is deactivated. Please contact support.",
         )
     
-    from app.services.email import send_otp_email
-    
-    await db.execute(
-        PhoneVerificationCode.__table__.delete().where(
-            PhoneVerificationCode.user_id == user.user_id,
-            PhoneVerificationCode.used.is_(False),
+    # STEP 4: Check if phone is verified
+    if not user.phone_verified:
+        # STEP 4a: Phone not verified - generate and send OTP
+        from app.services.email import send_otp_email
+        
+        await db.execute(
+            PhoneVerificationCode.__table__.delete().where(
+                PhoneVerificationCode.user_id == user.user_id,
+                PhoneVerificationCode.used.is_(False),
+            )
         )
-    )
-    await db.commit()
+        await db.commit()
+        
+        code = _generate_otp()
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_EXPIRE_MINUTES)
+        
+        phone_code = PhoneVerificationCode(
+            user_id=user.user_id,
+            code=code,
+            expires_at=expires_at,
+            used=False,
+        )
+        db.add(phone_code)
+        await db.flush()
+        await db.commit()
+        
+        email_sent = await send_otp_email(
+            user_email=user.email,
+            user_name=user.full_name,
+            otp_code=code,
+            expiry_minutes=settings.OTP_EXPIRE_MINUTES
+        )
+        
+        display_otp_terminal(
+            phone_number=user.phone_number or "N/A",
+            otp_code=code,
+            expiry_minutes=settings.OTP_EXPIRE_MINUTES
+        )
+        
+        if email_sent:
+            logger.info(f"[LOGIN] ✅ OTP email sent to {user.email} | Code: {code} | Phone: {user.phone_number}")
+        else:
+            logger.warning(f"[LOGIN] ⚠️ OTP email failed for {user.email} | Terminal backup used")
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "requires_verification": True,
+                "message": "OTP sent to your email. Please verify your phone number.",
+                "verification_endpoint": "/auth/signup/verify-otp",
+                "expires_in_minutes": settings.OTP_EXPIRE_MINUTES,
+                "email": user.email
+            }
+        )
     
-    code = _generate_otp()
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_EXPIRE_MINUTES)
-    
-    phone_code = PhoneVerificationCode(
-        user_id=user.user_id,
-        code=code,
-        expires_at=expires_at,
-        used=False,
-    )
-    db.add(phone_code)
-    await db.flush()
-    await db.commit()
-    
-    email_sent = await send_otp_email(
-        user_email=user.email,
-        user_name=user.full_name,
-        otp_code=code,
-        expiry_minutes=settings.OTP_EXPIRE_MINUTES
-    )
-    
-    display_otp_terminal(
-        phone_number=user.phone_number or "N/A",
-        otp_code=code,
-        expiry_minutes=settings.OTP_EXPIRE_MINUTES
-    )
-    
-    if email_sent:
-        logger.info(f"[LOGIN] ✅ OTP email sent to {user.email} | Code: {code} | Phone: {user.phone_number}")
-    else:
-        logger.warning(f"[LOGIN] ⚠️ OTP email failed for {user.email} | Terminal backup used")
-    
-    return JSONResponse(
-        status_code=200,
-        content={
-            "requires_verification": True,
-            "message": "OTP sent to your email. Please verify your phone number.",
-            "verification_endpoint": "/auth/signup/verify-otp",
-            "expires_in_minutes": settings.OTP_EXPIRE_MINUTES,
-            "email": user.email
-        }
+    # STEP 4b: Phone already verified - return token
+    token_data = {"sub": str(user.user_id), "role": user.role_name}
+    return TokenResponse(
+        access_token=create_access_token(token_data),
+        refresh_token=create_refresh_token(token_data),
+        token_type="bearer",
+        role=user.role_name.value if hasattr(user.role_name, 'value') else user.role_name,
     )
 
 @router.post("/refresh", response_model=TokenResponse)
