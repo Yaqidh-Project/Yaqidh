@@ -14,7 +14,7 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     password: Mapped[str] = mapped_column(String(255), nullable=False)
-    phone_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    phone_number: Mapped[str | None] = mapped_column(String(50), unique=True, nullable=True, index=True)
     role_name: Mapped[str] = mapped_column(String(50), nullable=False, default="Teacher")
     notification_prefs: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
