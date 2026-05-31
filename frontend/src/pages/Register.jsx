@@ -4,14 +4,14 @@ import { User, Mail, Phone, Lock, ArrowRight, ShieldCheck } from 'lucide-react';
 import axiosInstance from '../api/axiosInstance';
 
 export default function Register() {
-  const [step, setStep] = useState(1); // Step 1: Details, Step 2: SMS OTP Verification
+  const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
     phone: '',
     password: '',
     confirmPassword: '',
-    role: 'Parent', // Must match the backend Enum casing (Parent or Manager)
+    role: 'Parent',
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -47,7 +47,7 @@ export default function Register() {
   setLoading(true);
 
   try {
-    // ✅ OPTIMIZED: Single registration request
+    // Single registration request
     const response = await axiosInstance.post('/auth/register', {
       full_name: formData.fullName,
       email: formData.email,
@@ -57,10 +57,10 @@ export default function Register() {
       notification_prefs: { sms: true, email: true, app: true }
     });
 
-    // ✅ Store token immediately
+    // Store token immediately
     localStorage.setItem('token', response.data.access_token);
     
-    // ✅ OPTIMIZED: Dispatch OTP request in background (don't block UI)
+    // Dispatch OTP request in background
     axiosInstance.post('/auth/phone/request-code')
       .then(() => {
         console.log('✅ OTP dispatch queued after registration');
@@ -69,7 +69,7 @@ export default function Register() {
         console.error('⚠️ OTP request failed (user can request manually):', err);
       });
     
-    // ✅ Instantly advance to the OTP step without any network lag
+    // Instantly advance to the OTP step without any network lag
     setStep(2);
   } catch (err) {
     console.error(err);

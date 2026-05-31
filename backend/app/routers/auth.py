@@ -173,9 +173,6 @@ async def refresh_token(payload: RefreshRequest, db: AsyncSession = Depends(get_
     )
 
 
-# ============================================================================
-# 🆕 NEW: OTP SIGNUP FLOW (No authentication required)
-# ============================================================================
 
 @router.post("/signup/request-otp", status_code=status.HTTP_200_OK)
 async def signup_request_otp(
@@ -205,7 +202,7 @@ async def signup_request_otp(
             detail="Phone number is already verified.",
         )
 
-    # ✅ Invalidate any existing unused codes for this user
+    # Invalidate any existing unused codes for this user
     await db.execute(
         PhoneVerificationCode.__table__.delete().where(
             PhoneVerificationCode.user_id == user.user_id,
@@ -229,7 +226,7 @@ async def signup_request_otp(
     await db.flush()
     await db.commit()
 
-    # ✅ Send OTP via Email
+    # Send OTP via Email
     from app.services.email import send_otp_email
     
     try:
@@ -248,7 +245,7 @@ async def signup_request_otp(
     except Exception as e:
         logger.error(f"❌ Error sending OTP email: {str(e)}, using MOCK SMS")
     
-    # ✅ MOCK SMS as Backup (for development/testing)
+    # MOCK SMS as Backup (for development/testing)
     logger.info(
         f"[MOCK SMS] Sending OTP {code} to {phone_number} "
         f"(user={user.user_id}, expires={expires_at.isoformat()})"
@@ -302,7 +299,7 @@ async def signup_resend_otp(
         select(PhoneVerificationCode).where(
             PhoneVerificationCode.user_id == user.user_id,
             PhoneVerificationCode.used.is_(False),
-            PhoneVerificationCode.created_at > two_minutes_ago,  # ← Assuming created_at field exists
+            PhoneVerificationCode.created_at > two_minutes_ago,  # Assuming created_at field exists
         )
     )
     recent_code = result.scalar_one_or_none()
@@ -337,7 +334,7 @@ async def signup_resend_otp(
     await db.flush()
     await db.commit()
 
-    # ✅ Send OTP via Email
+    # Send OTP via Email
     from app.services.email import send_otp_email
     
     try:
@@ -356,7 +353,7 @@ async def signup_resend_otp(
     except Exception as e:
         logger.error(f"❌ Error resending OTP email: {str(e)}, using MOCK SMS")
     
-    # ✅ MOCK SMS as Backup
+    # MOCK SMS as Backup
     logger.info(f"[MOCK SMS - RESEND] Sending OTP {code} to {phone_number}")
     print(
         f"\n{'='*50}\n"
@@ -430,10 +427,6 @@ async def signup_verify_otp(
     return user
 
 
-# ============================================================================
-# 🔐 EXISTING: PHONE VERIFICATION AFTER LOGIN (requires authentication)
-# ============================================================================
-
 @router.post("/phone/request-code", status_code=status.HTTP_200_OK)
 async def request_phone_code(
     current_user: User = Depends(get_current_user),
@@ -471,7 +464,7 @@ async def request_phone_code(
     await db.flush()
     await db.commit()
 
-    # ✅ Send OTP via Email
+    # Send OTP via Email
     from app.services.email import send_otp_email
     
     try:
@@ -490,7 +483,7 @@ async def request_phone_code(
     except Exception as e:
         logger.error(f"❌ Error sending OTP email: {str(e)}, using MOCK SMS")
     
-    # ✅ MOCK SMS as Backup
+    # MOCK SMS as Backup
     logger.info(
         f"[MOCK SMS] Sending OTP {code} to {current_user.phone_number} "
         f"(user={current_user.user_id}, expires={expires_at.isoformat()})"
@@ -555,17 +548,17 @@ async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Dep
     """
     Validates account email existence and initiates a secure password recovery pipeline.
     """
-    # 1. Search for the targeted user within the database
+    # Search for the targeted user within the database
     result = await db.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
     
-    # 2. Security Practice: Return a successful mock response even if email doesn't exist
+    # Return a successful mock response even if email doesn't exist
     # This prevents malicious threat actors from tracing or scanning registered user emails (User Enumeration).
     if not user:
         return {"status": "success", "message": "If the account exists, a recovery link has been generated."}
         
-    # 3. Project Graduation Integration (Mailing/Reset Logic Pipeline)
-    # Here, your backend can generate a temporary secure token or dispatch an automated email.
+    # (Mailing/Reset Logic Pipeline)
+    # generate a temporary secure token or dispatch an automated email.
     print(f"⚠️ SECURITY ALERT: Secure recovery token generated for user: {user.email}")
     
     return {

@@ -38,7 +38,7 @@ async def send_incident_email(
     
     from app.templates.email_templates import get_incident_email_html
     
-    # ✅ Teachers should NOT see clip link
+    # Teachers are not allowed to see clip link
     clip_url_for_email = None if user_role == "Teacher" else incident_clip_url
     
     html_body = get_incident_email_html(

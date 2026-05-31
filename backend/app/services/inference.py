@@ -185,7 +185,7 @@ class ModelInference:
             
             cap = cv2.VideoCapture(tmp.name)
             frame_count = 0
-            frame_step = 2  # Sweeter spot for temporal tracking precision
+            frame_step = 2 
             
             while True:
                 ret, frame = cap.read()
@@ -195,7 +195,7 @@ class ModelInference:
                 if frame_count % frame_step == 0:
                     preprocessed = self._prepare_ndarray_input(frame)
                     
-                    # 1. Fall Detection Aggregator
+                    # Fall Detection Aggregator
                     if model_mode in ("fall_detection", "both"):
                         res = self._run_model_inference_on_preprocessed("fall_detection", preprocessed)
                         # Securely trap ONLY true positives or high-confidence locks
@@ -207,7 +207,7 @@ class ModelInference:
                             if max_fall["label"].lower() != "fall" and res["confidence"] >= max_fall["confidence"]:
                                 max_fall = res
 
-                    # 2. Violence Detection Aggregator
+                    # Violence Detection Aggregator
                     if model_mode in ("violence_detection", "both"):
                         res = self._run_model_inference_on_preprocessed("violence_detection", preprocessed)
                         if res["label"].lower() == "violence":

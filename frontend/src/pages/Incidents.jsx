@@ -141,7 +141,7 @@ export default function Incidents() {
 
     setCurrentUserRole(role);
 
-    // FIX: Appended ?limit=1000 parameter to bypass the default API pagination constraints and sync data counts
+    // Appended ?limit=1000 parameter to bypass the default API pagination constraints and sync data counts
     axiosInstance.get('/incidents?limit=1000')
       .then(response => {
         const mapped = response.data.map(item => ({

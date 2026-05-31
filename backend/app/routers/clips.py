@@ -111,7 +111,7 @@ async def get_incident_clip(
         raise HTTPException(status_code=404, detail="No clip available for this incident")
 
     # ── Corrected File Path Resolution ────────────────────────────────────────
-    # Path(__file__).resolve().parents[2] navigates to the 'Backend' root directory.
+    # Path(__file__).resolve().parents[2] navigates to the 'backend' root directory.
     # From there, we go directly into 'incident_clips'.
     base_backend_dir = Path(__file__).resolve().parents[2]
     filename = Path(incident.incident_clip).name

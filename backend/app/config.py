@@ -11,25 +11,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # DATABASE CONFIGURATION (Production-Ready)
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # ✅ CRITICAL FIX: Render.com injects DATABASE_URL via environment variables.
-    # DO NOT use localhost defaults in production. The env var is required.
-    DATABASE_URL: str = None  # Will be provided by hosting platform, validation in __init__
+    # DATABASE CONFIGURATION
+    DATABASE_URL: str = None 
 
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # JWT & SECURITY (Production-Ready)
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    SECRET_KEY: str = None  # Will be provided by hosting platform, validation in __init__
+    # JWT & SECURITY
+    SECRET_KEY: str = None
     ALGORITHM: str = "HS256"
 
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # STORAGE & FILE RETENTION (Production-Ready)
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # STORAGE & FILE RETENTION 
     CLIP_RETENTION_DAYS: int = 30
     CLIP_RETENTION_CHECK_INTERVAL: int = 86400
 
@@ -43,11 +35,7 @@ class Settings(BaseSettings):
     OTP_EXPIRE_MINUTES: int = 10
     ECHO_SQL: bool = False
 
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # EMAIL & NOTIFICATIONS (Production-Ready)
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # ✅ CRITICAL FIX: These are required for production. Backend must fail
-    # explicitly if email is not configured, rather than silently ignoring it.
+    # EMAIL & NOTIFICATIONS
     SMTP_HOST: Optional[str] = None
     SMTP_PORT: Optional[int] = None
     SMTP_USER: Optional[str] = None
@@ -55,9 +43,7 @@ class Settings(BaseSettings):
     SENDER_EMAIL: Optional[str] = None
     MANAGER_TEST_EMAIL: Optional[str] = None
 
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # ENVIRONMENT DETECTION (Production-Ready)
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # ENVIRONMENT DETECTION
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development").lower()
     IS_PRODUCTION: bool = ENVIRONMENT in ("production", "prod")
 
@@ -68,7 +54,7 @@ class Settings(BaseSettings):
 
     def __init__(self, **data):
         super().__init__(**data)
-        # ✅ CRITICAL VALIDATION: Ensure DATABASE_URL is provided
+        # Ensure DATABASE_URL is provided
         if not self.DATABASE_URL:
             default_local = "postgresql+asyncpg://postgres:postgres@localhost:5432/yaqidh"
             logger.warning(
@@ -78,7 +64,7 @@ class Settings(BaseSettings):
             )
             self.DATABASE_URL = default_local
 
-        # ✅ CRITICAL VALIDATION: Ensure SECRET_KEY is secure in production
+        # Ensure SECRET_KEY is secure in production
         if not self.SECRET_KEY or self.SECRET_KEY == "change-me-in-production-use-a-long-random-string":
             if self.IS_PRODUCTION:
                 raise ValueError(
@@ -92,7 +78,7 @@ class Settings(BaseSettings):
                 )
                 self.SECRET_KEY = "dev-secret-key-not-for-production"
 
-        # ✅ CRITICAL VALIDATION: Ensure SMTP credentials are configured
+        # Ensure SMTP credentials are configured
         if self.IS_PRODUCTION:
             missing_smtp = [
                 k for k in ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SENDER_EMAIL"]
