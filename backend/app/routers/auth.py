@@ -5,6 +5,7 @@ import string
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import bcrypt
@@ -64,7 +65,6 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == payload.email))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Email already registered")
-
 
     user = User(
         full_name=payload.full_name,
@@ -140,71 +140,63 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password. Please try again.",
         )
-    
-    if not user.phone_verified:
-        from app.services.email import send_otp_email
-        
-        await db.execute(
-            PhoneVerificationCode.__table__.delete().where(
-                PhoneVerificationCode.user_id == user.user_id,
-                PhoneVerificationCode.used.is_(False),
-            )
-        )
-        await db.commit()
-        
-        code = _generate_otp()
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_EXPIRE_MINUTES)
-        
-        phone_code = PhoneVerificationCode(
-            user_id=user.user_id,
-            code=code,
-            expires_at=expires_at,
-            used=False,
-        )
-        db.add(phone_code)
-        await db.flush()
-        await db.commit()
-        
-        email_sent = await send_otp_email(
-            user_email=user.email,
-            user_name=user.full_name,
-            otp_code=code,
-            expiry_minutes=settings.OTP_EXPIRE_MINUTES
-        )
-        
-        display_otp_terminal(
-            phone_number=user.phone_number or "N/A",
-            otp_code=code,
-            expiry_minutes=settings.OTP_EXPIRE_MINUTES
-        )
-        
-        if email_sent:
-            logger.info(f"[LOGIN] ✅ OTP email sent to {user.email} | Code: {code} | Phone: {user.phone_number}")
-        else:
-            logger.warning(f"[LOGIN] ⚠️ OTP email failed for {user.email} | Terminal backup used")
-        
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "requires_verification": True,
-                "message": "OTP sent to your email. Please verify your phone number.",
-                "verification_endpoint": "/auth/signup/verify-otp",
-                "expires_in_minutes": settings.OTP_EXPIRE_MINUTES
-            }
-        )
         
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Account is deactivated. Please contact support.",
         )
-        
-    token_data = {"sub": str(user.user_id), "role": user.role_name}
-    return TokenResponse(
-        access_token=create_access_token(token_data),
-        refresh_token=create_refresh_token(token_data),
-        token_type="bearer",
-        role=user.role_name.value if hasattr(user.role_name, 'value') else user.role_name,
+    
+    from app.services.email import send_otp_email
+    
+    await db.execute(
+        PhoneVerificationCode.__table__.delete().where(
+            PhoneVerificationCode.user_id == user.user_id,
+            PhoneVerificationCode.used.is_(False),
+        )
+    )
+    await db.commit()
+    
+    code = _generate_otp()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_EXPIRE_MINUTES)
+    
+    phone_code = PhoneVerificationCode(
+        user_id=user.user_id,
+        code=code,
+        expires_at=expires_at,
+        used=False,
+    )
+    db.add(phone_code)
+    await db.flush()
+    await db.commit()
+    
+    email_sent = await send_otp_email(
+        user_email=user.email,
+        user_name=user.full_name,
+        otp_code=code,
+        expiry_minutes=settings.OTP_EXPIRE_MINUTES
+    )
+    
+    display_otp_terminal(
+        phone_number=user.phone_number or "N/A",
+        otp_code=code,
+        expiry_minutes=settings.OTP_EXPIRE_MINUTES
+    )
+    
+    if email_sent:
+        logger.info(f"[LOGIN] ✅ OTP email sent to {user.email} | Code: {code} | Phone: {user.phone_number}")
+    else:
+        logger.warning(f"[LOGIN] ⚠️ OTP email failed for {user.email} | Terminal backup used")
+    
+    return JSONResponse(
+        status_code=200,
+        content={
+            "requires_verification": True,
+            "message": "OTP sent to your email. Please verify your phone number.",
+            "verification_endpoint": "/auth/signup/verify-otp",
+            "expires_in_minutes": settings.OTP_EXPIRE_MINUTES,
+            "email": user.email
+        }
     )
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -297,7 +289,7 @@ async def signup_resend_otp(phone_number: str, db: AsyncSession = Depends(get_db
     
     return {"message": "Verification code resent.", "expires_in_minutes": settings.OTP_EXPIRE_MINUTES}
 
-@router.post("/signup/verify-otp", response_model=UserOut)
+@router.post("/signup/verify-otp")
 async def signup_verify_otp(phone_number: str, code: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.phone_number == phone_number))
     user = result.scalar_one_or_none()
@@ -323,7 +315,14 @@ async def signup_verify_otp(phone_number: str, code: str, db: AsyncSession = Dep
     await db.commit()
     await db.refresh(user)
 
-    return user
+    token_data = {"sub": str(user.user_id), "role": user.role_name}
+    access_token = create_access_token(token_data)
+    
+    return {
+        "message": "Phone verified successfully",
+        "access_token": access_token,
+        "token_type": "bearer"
+    }
 
 @router.post("/phone/request-code", status_code=status.HTTP_200_OK)
 async def request_phone_code(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):

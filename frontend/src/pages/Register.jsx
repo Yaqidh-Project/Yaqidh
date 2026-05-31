@@ -61,7 +61,7 @@ export default function Register() {
       console.error(err);
       setError(err.response?.data?.detail || 'Registration failed. Please try again.');
     } finally {
-      setLoading(false);
+      loading(false);
     }
   };
 
@@ -76,7 +76,12 @@ export default function Register() {
     setLoading(true);
 
     try {
-      await axiosInstance.post(`/auth/signup/verify-otp?phone_number=${formData.phone}&code=${verificationCode}`);
+      const response = await axiosInstance.post(`/auth/signup/verify-otp?phone_number=${formData.phone}&code=${verificationCode}`);
+      
+      if (response.data && response.data.access_token) {
+        localStorage.setItem('token', response.data.access_token);
+        axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`;
+      }
       
       localStorage.setItem('user', JSON.stringify({ email: formData.email, role: formData.role.toLowerCase() }));
       window.location.href = '/';
@@ -84,7 +89,7 @@ export default function Register() {
       console.error(err);
       setError(err.response?.data?.detail || 'Invalid or expired code.');
     } finally {
-      setLoading(false);
+      loading(false);
     }
   };
 
