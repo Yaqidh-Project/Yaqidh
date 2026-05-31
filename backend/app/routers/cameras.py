@@ -121,7 +121,7 @@ async def get_camera(
 async def update_camera(
     camera_id: uuid.UUID,
     payload: CameraUpdate,
-    current_user: User = Depends(get_current_user),  # Open to both Manager & Parent (checked via helper)
+    current_user: User = Depends(get_current_user),  # Open to both Manager & Parent 
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -133,7 +133,7 @@ async def update_camera(
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
         
-    # Security Check: Enforce that the user owns the zone this camera belongs to
+    # Enforce that the user owns the zone this camera belongs to
     if not await _user_can_access_camera(current_user, camera, db):
          raise HTTPException(status_code=403, detail="Access denied: You cannot modify this camera.")
          
@@ -148,7 +148,7 @@ async def update_camera(
 @router.delete("/{camera_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_camera(
     camera_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),  # Open to both Manager & Parent (checked via helper)
+    current_user: User = Depends(get_current_user),  # Open to both Manager & Parent 
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -160,7 +160,7 @@ async def delete_camera(
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
         
-    # Security Check: Enforce that the user owns the zone this camera belongs to
+    # Enforce that the user owns the zone this camera belongs to
     if not await _user_can_access_camera(current_user, camera, db):
          raise HTTPException(status_code=403, detail="Access denied: You cannot delete this camera.")
          

@@ -32,7 +32,7 @@ export default function ForgotPassword() {
       setMessage(`If an active account exists for ${email}, a password reset link has been dispatched.`);
       setEmail('');
 
-      // CORRECTED REDIRECTION: Route the user to /reset-password instead of /login to complete the pipeline
+      // Route the user to /reset-password
       setTimeout(() => {
         navigate('/reset-password', { state: { email: email } });
       }, 3000);

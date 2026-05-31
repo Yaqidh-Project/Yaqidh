@@ -99,7 +99,7 @@ async def generate_report(
 @router.get("", response_model=list[ReportOut])
 async def list_reports(
     skip: int = 0,
-    limit: int = 1000,  # FIX: Increased limit from 50 to 1000 to allow full retrieval of compiled reports historical archives
+    limit: int = 1000,  
     current_user: User = Depends(require_roles(*ALLOWED_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
@@ -318,10 +318,10 @@ async def export_report_pdf(
     # Set up column structure based on Manager permissions (with or without 'Status')
     if is_manager:
         headers = ["Timestamp", "Zone", "Incident Type", "Category", "Status", "Confidence"]
-        col_widths = [105, 80, 100, 85, 82, 80] # Total 532
+        col_widths = [105, 80, 100, 85, 82, 80] 
     else:
         headers = ["Timestamp", "Zone", "Incident Type", "Category", "Confidence"]
-        col_widths = [117, 100, 115, 100, 100] # Total 532
+        col_widths = [117, 100, 115, 100, 100] 
 
     table_data = [[Paragraph(h, th_style) for h in headers]]
     

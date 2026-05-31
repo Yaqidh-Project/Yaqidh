@@ -45,7 +45,6 @@ export default function Login() {
 
     setLoading(true);
     try {
-      // ✅ OPTIMIZED: Single critical request (login)
       const res = await axiosInstance.post('/auth/login', { email, password });
       const { access_token, role } = res.data || {};
 
@@ -54,7 +53,7 @@ export default function Login() {
         return;
       }
 
-      // ✅ OPTIMIZED: Store token immediately and dispatch profile fetch in parallel
+      // Store token immediately and dispatch profile fetch in parallel
       localStorage.setItem('token', access_token);
       sessionStorage.setItem('token', access_token);
 
@@ -62,7 +61,7 @@ export default function Login() {
       localStorage.setItem('user', JSON.stringify(basicUser));
       sessionStorage.setItem('user', JSON.stringify(basicUser));
 
-      // ✅ OPTIMIZED: Fetch profile in background - don't block navigation
+      // Fetch profile in background
       // Dispatch the profile fetch but don't await it on critical path
       const profileFetch = axiosInstance.get('/users/me')
         .then((meRes) => {
@@ -90,10 +89,10 @@ export default function Login() {
           return null;
         });
 
-      // ✅ Check if teacher needs phone verification WHILE profile is fetching
+      // Check if teacher needs phone verification WHILE profile is fetching
       const isTeacher = normalizeIsTeacher(role);
       
-      // ✅ OPTIMIZED: If teacher, gate phone verification BEFORE profile fetch completes
+      // If teacher, gate phone verification BEFORE profile fetch completes
       if (isTeacher) {
         // We need profile to know if verified, so await but with tight timeout
         const profileData = await Promise.race([
@@ -105,7 +104,7 @@ export default function Login() {
           setRequiresPhoneVerification(true);
           setPhone(profileData.phoneNumber || '');
 
-          // ✅ OPTIMIZED: Request code in background - fire and forget
+          // Request code in background - fire and forget
           setRequesting(true);
           axiosInstance.post('/auth/phone/request-code')
             .then(() => {
@@ -123,7 +122,7 @@ export default function Login() {
         }
       }
 
-      // ✅ Everyone else navigates immediately
+      // Everyone else navigates immediately
       navigate('/', { replace: true });
     } catch (err) {
       console.error('Login error:', err);
@@ -146,7 +145,7 @@ export default function Login() {
     }
   };
 
-  // Request code (unchanged)
+  // Request code
   const handleRequestCode = async () => {
     setError('');
     if (!phone) {
@@ -165,7 +164,7 @@ export default function Login() {
     }
   };
 
-  // Verify code — SEND CODE IN QUERY (and optional token), NO JSON BODY
+  // Verify code
   const handleVerifyPhone = async (e) => {
     e.preventDefault();
     setError('');
@@ -178,9 +177,6 @@ export default function Login() {
     setVerifying(true);
     try {
       const codeClean = String(code).trim();
-      // If backend requires token in query too, uncomment next two lines:
-      // const token = localStorage.getItem('token') || '';
-      // const qs = `?code=${encodeURIComponent(codeClean)}&token=${encodeURIComponent(token)}`;
 
       const qs = `?code=${encodeURIComponent(codeClean)}`;
       await axiosInstance.post(`/auth/phone/verify-code${qs}`);
@@ -211,7 +207,7 @@ export default function Login() {
     }
   };
 
-  // Consistent input font helper classes (match login inputs)
+  // Consistent input font helper classes
   const inputBase = 'w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 transition text-slate-800 placeholder-slate-400';
 
   return (

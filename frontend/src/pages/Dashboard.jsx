@@ -72,17 +72,16 @@ export default function Dashboard() {
     };
     setUserRole(roleNames[role] || 'User');
 
-    // ✅ OPTIMIZED: Dispatch ALL requests in parallel (don't sequence them)
-    // This ensures network utilization is maximized and loading is faster
+    // Dispatch ALL requests in parallel
     const requests = [
-      // 1. Fetch user profile
+      // Fetch user profile
       axiosInstance.get('/users/me')
         .then(res => {
           if (res.data?.full_name) setUserName(res.data.full_name);
         })
         .catch(err => console.error('Error loading user profile:', err)),
 
-      // 2. Fetch cameras
+      // Fetch cameras
       axiosInstance.get('/cameras')
         .then(res => {
           const total = res.data.length;
@@ -94,7 +93,7 @@ export default function Dashboard() {
           setActiveCameras(`${activeCount}/${totalCameras || '—'}`);
         }),
 
-      // 3. Fetch incidents
+      // Fetch incidents
       axiosInstance.get('/incidents')
         .then(res => {
           const mappedActivities = res.data.map(inc => ({
@@ -109,7 +108,7 @@ export default function Dashboard() {
         .catch(err => console.error("Error loading incidents:", err)),
     ];
 
-    // 4. Manager-specific: Fetch performance dashboard
+    // Manager-specific: Fetch performance dashboard
     if (role === 'manager') {
       setIsLoadingPerformance(true);
       requests.push(
@@ -126,9 +125,8 @@ export default function Dashboard() {
       );
     }
 
-    // ✅ Optional: Wait for all requests to complete (for analytics or cleanup)
+    // Wait for all requests to complete (for analytics or cleanup)
     Promise.allSettled(requests).catch(() => {
-      // Silently handle any errors (already logged above)
     });
 
   }, [activeCount, totalCameras]);

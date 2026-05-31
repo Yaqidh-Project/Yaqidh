@@ -5,7 +5,6 @@ const CameraContext = createContext();
 export const useCamera = () => useContext(CameraContext);
 
 export const CameraProvider = ({ children }) => {
-  // الحالات تبدأ دائماً فارغة ونظيفة
   const [streamingStates, setStreamingStates] = useState({});
   const [analyzingStates, setAnalyzingStates] = useState({});
   const [liveAlerts, setLiveAlerts] = useState({});
@@ -18,9 +17,7 @@ export const CameraProvider = ({ children }) => {
   const mediaRecordersRef = useRef({});
   const recordedChunksRef = useRef({});
 
-  // تنظيف الـ localStorage عند أول تحميل للتخلص من أي قراءات "خراب" قديمة
   useEffect(() => {
-    // يفضل مسح القيم السابقة لضمان عدم تعليق العداد
     Object.keys(localStorage).forEach(key => {
       if (key.startsWith('camera_active_')) {
         localStorage.removeItem(key);
@@ -28,7 +25,6 @@ export const CameraProvider = ({ children }) => {
     });
   }, []);
 
-  // حساب العداد بشكل آمن وصارم (يضمن حساب القيم التي تساوي true فعلياً فقط)
   const activeCount = Object.keys(streamingStates).reduce((count, id) => {
     return streamingStates[id] === true ? count + 1 : count;
   }, 0);
@@ -60,7 +56,6 @@ export const CameraProvider = ({ children }) => {
       delete bgVideosRef.current[id];
     }
 
-    // تحديث الحالة فوراً إلى false
     setStreamingStates(prev => ({ ...prev, [id]: false }));
     setAnalyzingStates(prev => ({ ...prev, [id]: false }));
     setLiveAlerts(prev => ({ ...prev, [id]: null }));
@@ -274,7 +269,6 @@ export const CameraProvider = ({ children }) => {
 
       if (uiVideoElement) uiVideoElement.srcObject = stream;
 
-      // تحديث الحالة فوراً لتصبح true
       setStreamingStates(prev => ({ ...prev, [id]: true }));
       localStorage.setItem(`camera_active_${id}`, 'true');
 
@@ -316,7 +310,7 @@ export const CameraProvider = ({ children }) => {
         analyzingStates,
         liveAlerts,
         streamsRef,
-        activeCount, // العداد المحمي والمحدث باستمرار
+        activeCount,
         startCameraPipeline,
         stopCameraPipeline,
       }}

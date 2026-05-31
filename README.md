@@ -1,4 +1,4 @@
-# Yaqidh | يقظ
+# Yaqidh | يـقِــظ
 ### Smart Vision System for Safer Childhood Environments
 
 ![Project Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)

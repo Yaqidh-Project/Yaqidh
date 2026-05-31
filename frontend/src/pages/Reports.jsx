@@ -55,7 +55,6 @@ export default function Reports() {
    * Fetch initial unique cameras/zones to dynamically populate the zone filter dropdown options
    */
   useEffect(() => {
-    // FIX: Added limit=1000 query parameter to fetch all incidents across available zones, bypassing default backend limit
     axiosInstance.get('/incidents?limit=1000')
       .then(res => {
         const data = res.data || [];
@@ -80,12 +79,11 @@ export default function Reports() {
    * Fetches and filters system analytics data to synchronously update charts, counters, and data logs
    */
   const fetchAnalyticsData = () => {
-    // FIX: Added limit=1000 query parameter to retrieve the complete data stream for accurate UI metrics computation
     axiosInstance.get('/incidents?limit=1000')
       .then(res => {
         let data = res.data || [];
 
-        // 1. Apply Dynamic Frontend Date Filters
+        // Apply Dynamic Frontend Date Filters
         if (startDate) {
           data = data.filter(i => i.timestamp && new Date(i.timestamp) >= new Date(startDate));
         }
@@ -95,17 +93,17 @@ export default function Reports() {
           data = data.filter(i => i.timestamp && new Date(i.timestamp) <= end);
         }
 
-        // 2. Apply Danger Category Filter
+        // Apply Danger Category Filter
         if (dangerCategory) {
           data = data.filter(i => i.danger_category?.toLowerCase() === dangerCategory.toLowerCase());
         }
 
-        // 3. Apply Status Filter
+        // Apply Status Filter
         if (status && isManager) {
           data = data.filter(i => i.status?.toLowerCase() === status.toLowerCase());
         }
 
-        // 4. Apply Camera / Zone Filter
+        // Apply Camera / Zone Filter
         if (cameraId) {
           data = data.filter(i => i.camera_id === cameraId);
         }
@@ -114,7 +112,7 @@ export default function Reports() {
         setTotalIncidents(data.length);
         setIncidentsList(data);
 
-        // 5. MANAGER STATISTIC: Calculate average response time for resolved items
+        // MANAGER STATISTIC: Calculate average response time for resolved items
         if (isManager) {
           const resolvedIncidents = data.filter(i => i.status?.toLowerCase() === 'resolved' && i.resolved_at);
           if (resolvedIncidents.length > 0) {

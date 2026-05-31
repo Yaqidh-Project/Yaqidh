@@ -10,7 +10,7 @@ from app.schemas.zone import ZoneCreate, ZoneUpdate, ZoneOut, ZoneAssign
 from app.auth.dependencies import get_current_user, require_roles, require_phone_verified
 
 # Global Router Lock: Only Managers and Parents can touch this router.
-# Teachers and other roles are completely blocked from the root.
+# Teachers are completely blocked from the root.
 router = APIRouter(
     prefix="/zones",
     tags=["zones"],
@@ -31,8 +31,7 @@ async def create_zone(
     Creates a new infrastructure monitoring zone and establishes initial ownership bounds.
     Accessible by both Managers and Parents.
     """
-    # Optimized: Initialize the Zone object and map the relationship immediately.
-    # This avoids multiple redundant db.flush() and heavy selectinload queries.
+    # Initialize the Zone object and map the relationship immediately.
     zone = Zone(zone_name=payload.zone_name)
     zone.users.append(current_user)
     
@@ -42,8 +41,6 @@ async def create_zone(
     # Perform a single database roundtrip to commit and persist all changes permanently
     await db.commit()
     
-    # Pydantic's ZoneOut schema will automatically extract zone_id and zone_name 
-    # directly from the returned object without needing any extra database fetches.
     return zone
 
 
@@ -121,7 +118,7 @@ async def update_zone(
     if not zone:
         raise HTTPException(status_code=404, detail="Zone not found")
         
-    # Security Boundary Check: Verify that the Parent/Manager actually owns this zone before updating
+    # Verify that the Parent/Manager actually owns this zone before updating
     if current_user not in zone.users:
         raise HTTPException(status_code=403, detail="Access denied: You do not own this zone")
         
@@ -155,7 +152,7 @@ async def delete_zone(
     if not zone:
         raise HTTPException(status_code=404, detail="Zone not found")
         
-    # Security Boundary Check: Verify that the Parent/Manager actually owns this zone before deleting
+    # Verify that the Parent/Manager actually owns this zone before deleting
     if current_user not in zone.users:
         raise HTTPException(status_code=403, detail="Access denied: You do not own this zone")
         
@@ -183,7 +180,7 @@ async def assign_user_to_zone(
     if not zone:
         raise HTTPException(status_code=404, detail="Zone not found")
 
-    # Access Authorization Check: Verify that the Manager owns this zone before letting them modify its access rights
+    # Verify that the Manager owns this zone before letting them modify its access rights
     if current_user not in zone.users:
         raise HTTPException(status_code=403, detail="Access denied: You do not own this zone")
 

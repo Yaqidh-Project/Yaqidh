@@ -174,7 +174,7 @@ async def predict(
 
         user_ids = await _get_zone_users(camera_id, db)
         
-        # FIX 1: Added await to guarantee execution before response context terminates
+        # await to guarantee execution before response context terminates
         await ws_manager.notify_incident(
             user_ids,
             incident_id=incident.incident_id,
@@ -281,7 +281,7 @@ async def detect_both(
 
         user_ids = await _get_zone_users(camera_id, db)
         
-        # FIX 2: Added await to prevent request context from closing prematurely
+        # await to prevent request context from closing prematurely
         await ws_manager.notify_incident(
             user_ids,
             incident_id=incident.incident_id,
@@ -325,7 +325,7 @@ async def detect_both(
 
         user_ids = await _get_zone_users(camera_id, db)
         
-        # FIX 3: Added await to prevent request context from closing prematurely
+        # await to prevent request context from closing prematurely
         await ws_manager.notify_incident(
             user_ids,
             incident_id=incident.incident_id,

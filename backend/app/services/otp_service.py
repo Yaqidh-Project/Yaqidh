@@ -30,7 +30,7 @@ async def generate_and_send_otp(
         }
     """
     try:
-        # 1. Find user by phone number
+        # Find user by phone number
         result = await db.execute(
             select(User).where(User.phone_number == phone_number)
         )
@@ -43,7 +43,7 @@ async def generate_and_send_otp(
                 "message": "Phone number not found in our system"
             }
         
-        # 2. Check the most recent non-verified OTP attempt for rate limiting
+        # Check the most recent non-verified OTP attempt for rate limiting
         now = datetime.now(timezone.utc)
         result = await db.execute(
             select(OTPVerification)
@@ -61,10 +61,10 @@ async def generate_and_send_otp(
                 "message": f"Too many failed attempts. Please try again in {OTP_EXPIRY_MINUTES} minutes"
             }
         
-        # 3. Generate 6-digit OTP
+        # Generate 6-digit OTP
         otp_code = str(random.randint(100000, 999999))
         
-        # 4. Create OTP record in database
+        # Create OTP record in database
         expires_at = now + timedelta(minutes=OTP_EXPIRY_MINUTES)
         
         otp_record = OTPVerification(
@@ -79,7 +79,7 @@ async def generate_and_send_otp(
         db.add(otp_record)
         await db.commit()
         
-        # 5. Send OTP via email
+        # Send OTP via email
         email_sent = await send_otp_email(
             user_email=user.email,
             user_name=user.full_name or "User",
@@ -128,7 +128,7 @@ async def verify_otp(
         }
     """
     try:
-        # 1. Find user by phone number
+        # Find user by phone number
         result = await db.execute(
             select(User).where(User.phone_number == phone_number)
         )
@@ -140,7 +140,7 @@ async def verify_otp(
                 "message": "Phone number not found"
             }
         
-        # 2. Find valid (non-expired, non-verified) OTP record
+        # Find valid (non-expired, non-verified) OTP record
         now = datetime.now(timezone.utc)
         result = await db.execute(
             select(OTPVerification)
@@ -157,14 +157,14 @@ async def verify_otp(
                 "message": "No valid OTP found. Please request a new one"
             }
         
-        # 3. Check if max attempts exceeded
+        # Check if max attempts exceeded
         if otp_record.failed_attempts >= MAX_FAILED_ATTEMPTS:
             return {
                 "success": False,
                 "message": f"Too many failed attempts. OTP expired. Request a new one"
             }
         
-        # 4. Verify OTP code
+        # Verify OTP code
         if otp_record.otp_code != otp_code:
             otp_record.failed_attempts += 1
             await db.commit()
@@ -183,13 +183,13 @@ async def verify_otp(
                 "message": f"Invalid OTP. {remaining_attempts} attempts remaining"
             }
         
-        # 5. Mark OTP as verified
+        # Mark OTP as verified
         otp_record.verified = True
         await db.commit()
         
         logger.info(f"OTP verified successfully for user {user.user_id}")
         
-        # 6. Generate JWT token (use existing JWT logic)
+        # Generate JWT token (use existing JWT logic)
         from app.auth.jwt import create_access_token
         
         access_token = create_access_token(

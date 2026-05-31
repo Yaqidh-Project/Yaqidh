@@ -31,7 +31,6 @@ BASE_DIR            = Path(__file__).resolve().parent.parent.parent / "backend" 
 FALL_MODEL_PATH     = str(BASE_DIR / "fall_detection.onnx")
 VIOLENCE_MODEL_PATH = str(BASE_DIR / "violence_detection.onnx")
 
-# ── FIXED: Points cleanly to the global asset directory ───────────────────
 # Navigates up from the current file location to reach 'Backend/incident_clips'
 BASE_BACKEND_DIR = Path(__file__).resolve().parents[2]
 CLIPS_DIR = BASE_BACKEND_DIR / "incident_clips"
@@ -197,7 +196,6 @@ def save_clip(frames: list, event_type: str) -> tuple:
         writer.write(f)
     writer.release()
     
-    # ── Background Web-Codec H.264 Transcoding Alignment via FFmpeg ───────
     cmd = [
         'ffmpeg', '-y', 
         '-i', str(temp_path), 
