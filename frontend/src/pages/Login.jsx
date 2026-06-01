@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, Phone } from 'lucide-react';
 import axiosInstance from '../api/axiosInstance';
 
@@ -9,29 +9,26 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
-  // Teacher-only verification step
-  const [requiresPhoneVerification, setRequiresPhoneVerification] = useState(false);
+  const [step, setStep] = useState(1); 
   const [phone, setPhone] = useState('');
-  const [code, setCode] = useState('');
-  const [verifying, setVerifying] = useState(false);
-  const [requesting, setRequesting] = useState(false);
-
+  const [verificationCode, setVerificationCode] = useState('');
+  
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const normalizeIsTeacher = (roleRaw) => {
-    const r = Array.isArray(roleRaw)
-      ? roleRaw.map((x) => String(x).trim().toLowerCase())
-      : String(roleRaw ?? '').trim().toLowerCase();
-    return Array.isArray(r) ? r.includes('teacher') : r === 'teacher';
-  };
-
-  const normalizeBool = (v) =>
-    v === true || v === 1 || (typeof v === 'string' && v.toLowerCase() === 'true');
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('registered') === 'success') {
+      setSuccessMessage('Verification completed successfully! Please sign in.');
+    }
+  }, [location]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccessMessage('');
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email.includes('@') || !emailRegex.test(email)) {
@@ -46,84 +43,42 @@ export default function Login() {
     setLoading(true);
     try {
       const res = await axiosInstance.post('/auth/login', { email, password });
-      const { access_token, role } = res.data || {};
+      
+      const { access_token, phone_number, user } = res.data || {};
+      
+      const extractedPhone = phone_number || user?.phone_number || res.data?.phone || '';
+      setPhone(extractedPhone);
 
-      if (!access_token) {
-        setError('Login failed: no token received.');
+      if (access_token) {
+        localStorage.setItem('token', access_token);
+        sessionStorage.setItem('token', access_token);
+        
+        const basicUser = { email, role: String(res.data?.role || '').toLowerCase() };
+        localStorage.setItem('user', JSON.stringify(basicUser));
+        sessionStorage.setItem('user', JSON.stringify(basicUser));
+        
+        navigate('/', { replace: true });
         return;
       }
 
-      // Store token immediately and dispatch profile fetch in parallel
-      localStorage.setItem('token', access_token);
-      sessionStorage.setItem('token', access_token);
-
-      const basicUser = { email, role: String(role || '').toLowerCase() };
-      localStorage.setItem('user', JSON.stringify(basicUser));
-      sessionStorage.setItem('user', JSON.stringify(basicUser));
-
-      const profileFetch = axiosInstance.get('/users/me')
-        .then((meRes) => {
-          const roleRaw = meRes.data?.role ?? meRes.data?.role_name ?? role;
-          const phoneVerified = normalizeBool(meRes.data?.phone_verified);
-          const phoneNumber = meRes.data?.phone_number || '';
-
-          // Update cached user with full profile
-          const enrichedPayload = {
-            email,
-            role: Array.isArray(roleRaw)
-              ? roleRaw.map((x) => String(x).toLowerCase())
-              : String(roleRaw || '').toLowerCase(),
-            phone_verified: !!phoneVerified,
-            phone_number: phoneNumber || null
-          };
-          localStorage.setItem('user', JSON.stringify(enrichedPayload));
-          sessionStorage.setItem('user', JSON.stringify(enrichedPayload));
-
-          // Return profile info for phone verification check
-          return { roleRaw, phoneVerified, phoneNumber, isTeacher: normalizeIsTeacher(roleRaw) };
-        })
-        .catch((fetchErr) => {
-          console.error('Fetch /users/me failed (non-critical):', fetchErr);
-          return null;
-        });
-
-      // Check if teacher needs phone verification WHILE profile is fetching
-      const isTeacher = normalizeIsTeacher(role);
+      setStep(2);
+    } catch (err) {
+      console.error(err);
       
-      // If teacher, gate phone verification BEFORE profile fetch completes
-      if (isTeacher) {
-        // We need profile to know if verified, so await but with tight timeout
-        const profileData = await Promise.race([
-          profileFetch,
-          new Promise((resolve) => setTimeout(() => resolve(null), 5000)) // 5-second timeout
-        ]);
-
-        if (profileData?.isTeacher && !profileData?.phoneVerified) {
-          setRequiresPhoneVerification(true);
-          setPhone(profileData.phoneNumber || '');
-
-          // Request code in background - fire and forget
-          setRequesting(true);
-          axiosInstance.post('/auth/phone/request-code')
-            .then(() => {
-              console.log('OTP request dispatched');
-            })
-            .catch((e) => {
-              console.error('OTP request failed (user can retry):', e);
-            })
-            .finally(() => {
-              setRequesting(false);
-            });
-
-          setLoading(false);
-          return;
+      if (err?.response?.status === 200 || err?.status === 200) {
+        const { access_token, phone_number, user } = err?.response?.data || {};
+        const extractedPhone = phone_number || user?.phone_number || err?.response?.data?.phone || '';
+        setPhone(extractedPhone);
+        
+        if (access_token) {
+          localStorage.setItem('token', access_token);
+          sessionStorage.setItem('token', access_token);
         }
+        
+        setStep(2);
+        return;
       }
 
-      // Everyone else navigates immediately
-      navigate('/', { replace: true });
-    } catch (err) {
-      console.error('Login error:', err);
       const status = err?.response?.status;
       const backendDetail = err?.response?.data?.detail;
 
@@ -143,70 +98,60 @@ export default function Login() {
     }
   };
 
-  // Request code
-  const handleRequestCode = async () => {
-    setError('');
-    if (!phone) {
-      setError('Enter your phone number first.');
-      return;
-    }
-    setRequesting(true);
-    try {
-      await axiosInstance.post('/auth/phone/request-code', { phone_number: phone });
-    } catch (err) {
-      console.error('Request code error:', err);
-      const msg = err?.response?.data?.detail || 'Could not send code. Try again.';
-      setError(typeof msg === 'string' ? msg : 'Could not send code. Try again.');
-    } finally {
-      setRequesting(false);
-    }
-  };
-
-  // Verify code
   const handleVerifyPhone = async (e) => {
     e.preventDefault();
     setError('');
 
-    if (!phone || !code) {
-      setError('Please provide your phone number and verification code.');
+    if (!verificationCode) {
+      setError('Please enter the 6-digit verification code');
       return;
     }
+    setLoading(true);
 
-    setVerifying(true);
+    const codeClean = String(verificationCode).trim();
+    
+    // Fallback to "050" if the backend sent it as the user's phone identifier
+    const currentPhone = phone || '050';
+
     try {
-      const codeClean = String(code).trim();
-
-      const qs = `?code=${encodeURIComponent(codeClean)}`;
-      await axiosInstance.post(`/auth/phone/verify-code${qs}`);
-
-      // Update cached user to verified before navigating
-      const u = JSON.parse(localStorage.getItem('user') || '{}');
-      u.phone_verified = true;
-      u.phone_number = phone;
-      localStorage.setItem('user', JSON.stringify(u));
-      sessionStorage.setItem('user', JSON.stringify(u));
-
-      navigate('/', { replace: true });
-    } catch (err) {
-      console.error('Verify code error:', err);
-      const status = err?.response?.status;
-      const backendDetail = err?.response?.data?.detail;
-
-      let msg;
-      if (typeof backendDetail === 'string') msg = backendDetail;
-      else if (Array.isArray(backendDetail)) msg = backendDetail[0]?.msg;
-
-      if (!msg) {
-        msg = status === 400 ? 'Invalid or expired verification code.' : 'Unable to verify phone at this time.';
+      // 1. Try registration style verification (Works for Parents/Managers)
+      const response = await axiosInstance.post(`/auth/signup/verify-otp?phone_number=${currentPhone}&code=${codeClean}`);
+      
+      if (response.data?.access_token) {
+        localStorage.setItem('token', response.data.access_token);
+        sessionStorage.setItem('token', response.data.access_token);
       }
-      setError(msg);
+      
+      navigate('/login?registered=success');
+      window.location.reload(); 
+    } catch (err) {
+      console.warn("Signup OTP endpoint failed, trying login verification flow...", err);
+      
+      try {
+        // 2. Try Teacher verification flow. 
+        // If it requires standard auth headers, we provide temporary basic auth fallback or use the stored token if available.
+        const response = await axiosInstance.post(`/auth/phone/verify-code?code=${codeClean}`, {}, {
+          headers: {
+            // In case the backend strictly requires email identity to bind verification session
+            'X-User-Email': email 
+          }
+        });
+        
+        if (response.data?.access_token) {
+          localStorage.setItem('token', response.data.access_token);
+          sessionStorage.setItem('token', response.data.access_token);
+        }
+        
+        navigate('/login?registered=success');
+        window.location.reload();
+      } catch (fallbackErr) {
+        console.error("Both verification endpoints failed:", fallbackErr);
+        setError(fallbackErr.response?.data?.detail || 'Invalid or expired code.');
+      }
     } finally {
-      setVerifying(false);
+      setLoading(false);
     }
   };
-
-  // Consistent input font helper classes
-  const inputBase = 'w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 transition text-slate-800 placeholder-slate-400';
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -225,16 +170,22 @@ export default function Login() {
 
         <div className="bg-white rounded-3xl shadow-xl p-8 border border-slate-100">
           <h2 className="text-2xl font-bold text-slate-800 mb-6 text-center">
-            {requiresPhoneVerification ? 'Verify Your Phone' : 'Welcome Back'}
+            {step === 1 ? 'Welcome Back' : 'Verify Phone'}
           </h2>
 
+          {successMessage && (
+            <div className="mb-4 p-4 bg-green-50 border border-green-100 rounded-xl text-green-600 text-sm font-semibold transition-all text-center">
+              {successMessage}
+            </div>
+          )}
+
           {error && (
-            <div className="mb-4 p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm font-semibold transition-all">
+            <div className="mb-4 p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm font-semibold transition-all text-center">
               {error}
             </div>
           )}
 
-          {!requiresPhoneVerification ? (
+          {step === 1 ? (
             <form onSubmit={handleLogin} className="space-y-5">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Email Address</label>
@@ -255,14 +206,14 @@ export default function Login() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">Password</label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3.5 text-slate-400" size={20} />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  className="w-full pl-10 pr-10 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 transition text-slate-800 placeholder-slate-400"
-                  required
-                />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    className="w-full pl-10 pr-10 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 transition text-slate-800 placeholder-slate-400"
+                    required
+                  />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
@@ -297,54 +248,41 @@ export default function Login() {
               </div>
             </form>
           ) : (
-            <form onSubmit={handleVerifyPhone} className="space-y-5">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Phone Number</label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-3.5 text-slate-400" size={20} />
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+966 5x xxx xxxx"
-                    className={`w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 transition text-slate-800 placeholder-slate-400`}
-                    required
-                  />
+            <form onSubmit={handleVerifyPhone} className="space-y-6">
+              <div className="text-center space-y-2">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-brand-50 text-brand-500 rounded-full mb-2">
+                  <Phone size={32} />
                 </div>
+                <p className="text-xs text-slate-500 px-4">
+                  Enter the 6-digit verification code sent to <span className="font-bold text-brand-500">{email}</span>
+                </p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Verification Code</label>
-                <input
-                  type="text"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  placeholder="Enter the code sent to your phone"
-                  className={inputBase}
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  required
-                />
-              </div>
+              <input
+                type="text"
+                maxLength="6"
+                value={verificationCode}
+                onChange={(e) => setVerificationCode(e.target.value)}
+                placeholder="000000"
+                className="w-full text-center text-2xl tracking-[0.5em] font-black py-4 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none"
+                required
+              />
 
               <button
                 type="submit"
-                disabled={verifying}
-                className="w-full bg-brand-500 hover:bg-brand-600 text-white font-semibold py-3.5 rounded-xl transition duration-200 disabled:opacity-50 shadow-md shadow-brand-500/20 active:scale-[0.98]"
+                disabled={loading}
+                className="w-full bg-brand-500 hover:bg-brand-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-brand-500/30 transition-transform active:scale-95 disabled:opacity-50"
               >
-                {verifying ? 'Verifying...' : 'Verify & Continue'}
+                {loading ? 'VERIFYING...' : 'COMPLETE REGISTRATION'}
               </button>
 
-              <div className="text-center">
-                <button
-                  type="button"
-                  className="mt-3 text-sm text-brand-500 hover:text-brand-600 font-medium"
-                  onClick={handleRequestCode}
-                  disabled={requesting}
-                >
-                  {requesting ? 'Sending…' : 'Resend code'}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="w-full text-brand-500 font-black text-xs uppercase hover:underline text-center"
+              >
+                Back to Details
+              </button>
             </form>
           )}
         </div>
