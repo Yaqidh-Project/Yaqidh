@@ -16,6 +16,14 @@ export default function Login() {
   const queryParams = new URLSearchParams(location.search);
   const isRegisteredSuccess = queryParams.get('registered') === 'success';
 
+  const normalizeRole = (roleRaw) => {
+    if (!roleRaw) return '';
+    if (Array.isArray(roleRaw)) {
+      return roleRaw.map((x) => String(x).trim().toLowerCase());
+    }
+    return String(roleRaw).trim().toLowerCase();
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -40,7 +48,6 @@ export default function Login() {
 
       console.log('[LOGIN] Response received:', response.data);
       
-      // Check for OTP verification requirement
       if (response.data && response.data.requires_verification === true) {
         console.log('[LOGIN] Phone verification required - redirecting to /verify-otp');
         localStorage.setItem('verify_email', formData.email);
@@ -49,25 +56,27 @@ export default function Login() {
         return;
       }
 
-      // Check for successful login with token
       if (response.data && response.data.access_token) {
         console.log('[LOGIN] Token received - storing and redirecting to dashboard');
+        
         localStorage.setItem('token', response.data.access_token);
         if (response.data.refresh_token) {
           localStorage.setItem('refresh_token', response.data.refresh_token);
         }
-        if (response.data.user) {
-          localStorage.setItem('user', JSON.stringify({
-            email: response.data.user.email,
-            role: response.data.user.role?.toLowerCase() || response.data.user.role_name?.toLowerCase()
-          }));
-        }
+        
+        const roleRaw = response.data.user?.role ?? response.data.user?.role_name ?? response.data.role;
+        const cleanRole = normalizeRole(roleRaw);
+
+        localStorage.setItem('user', JSON.stringify({
+          email: response.data.user?.email || formData.email,
+          role: cleanRole
+        }));
+
         axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`;
         window.location.href = '/';
         return;
       }
       
-      // No token and not verification - error
       console.error('[LOGIN] Unexpected response - no token and no verification required');
       setError('Unexpected server response. Please try again.');
     } catch (err) {
@@ -97,7 +106,6 @@ export default function Login() {
           <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest mt-1">Sign in to your account</p>
         </div>
 
-        {/* Global Registration Success Banner Block */}
         {isRegisteredSuccess && (
           <div className="mb-2 p-4 bg-emerald-600 rounded-2xl text-white text-xs font-black text-center shadow-xl shadow-emerald-600/20 raw-uppercase tracking-wide">
             ACCOUNT ACTIVATED SUCCESSFULLY! PLEASE LOG IN WITH YOUR CREDENTIALS.
@@ -121,6 +129,7 @@ export default function Login() {
                 onChange={handleInputChange}
                 placeholder="Email Address"
                 className="w-full pl-12 pr-4 py-4 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none font-medium"
+                required
               />
             </div>
 
@@ -133,10 +142,10 @@ export default function Login() {
                 onChange={handleInputChange}
                 placeholder="Password"
                 className="w-full pl-12 pr-4 py-4 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none font-medium"
+                required
               />
             </div>
 
-            {/* Password Recovery Pipeline Link */}
             <div className="flex justify-end pt-1">
               <Link 
                 to="/forgot-password" 
