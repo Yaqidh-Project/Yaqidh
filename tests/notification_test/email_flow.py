@@ -35,7 +35,7 @@ TEST_EMAIL = "test_manager@gmail.com"
 TEST_PASSWORD = "SecureTest@123456"
 TEST_FULL_NAME = "Test Manager"
 TEST_PHONE = "0501234567"
-RECIPIENT_EMAIL = "rawan.jalahmadi@gmail.com"
+RECIPIENT_EMAIL = "YOUR_RECEIVER_EMAIL@gmail.com"
 
 GREEN = "\033[92m"
 RED = "\033[91m"
