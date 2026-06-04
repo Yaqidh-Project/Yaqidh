@@ -201,7 +201,8 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
                 "message": "OTP sent to your email. Please verify your phone number.",
                 "verification_endpoint": "/auth/signup/verify-otp",
                 "expires_in_minutes": settings.OTP_EXPIRE_MINUTES,
-                "email": user.email
+                "email": user.email,
+                "phone_number": user.phone_number, 
             }
         )
     

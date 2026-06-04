@@ -11,10 +11,11 @@ export default function Login() {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  const [step, setStep] = useState(1); 
+  const [step, setStep] = useState(1);
   const [phone, setPhone] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
-  
+  const [tempToken, setTempToken] = useState('');
+
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -43,20 +44,22 @@ export default function Login() {
     setLoading(true);
     try {
       const res = await axiosInstance.post('/auth/login', { email, password });
-      
+
       const { access_token, phone_number, user } = res.data || {};
-      
+
       const extractedPhone = phone_number || user?.phone_number || res.data?.phone || '';
       setPhone(extractedPhone);
+
+      setTempToken(access_token || '');
 
       if (access_token) {
         localStorage.setItem('token', access_token);
         sessionStorage.setItem('token', access_token);
-        
+
         const basicUser = { email, role: String(res.data?.role || '').toLowerCase() };
         localStorage.setItem('user', JSON.stringify(basicUser));
         sessionStorage.setItem('user', JSON.stringify(basicUser));
-        
+
         navigate('/', { replace: true });
         return;
       }
@@ -64,17 +67,18 @@ export default function Login() {
       setStep(2);
     } catch (err) {
       console.error(err);
-      
+
       if (err?.response?.status === 200 || err?.status === 200) {
         const { access_token, phone_number, user } = err?.response?.data || {};
         const extractedPhone = phone_number || user?.phone_number || err?.response?.data?.phone || '';
         setPhone(extractedPhone);
-        
+        setTempToken(access_token || '');
+
         if (access_token) {
           localStorage.setItem('token', access_token);
           sessionStorage.setItem('token', access_token);
         }
-        
+
         setStep(2);
         return;
       }
@@ -106,47 +110,41 @@ export default function Login() {
       setError('Please enter the 6-digit verification code');
       return;
     }
-    setLoading(true);
 
+    if (!phone || phone.trim().length < 3) {
+      setError('Session error: phone number missing. Please go back and sign in again.');
+      return;
+    }
+
+    setLoading(true);
     const codeClean = String(verificationCode).trim();
-    
-    // Fallback to "050" if the backend sent it as the user's phone identifier
-    const currentPhone = phone || '050';
 
     try {
-      // 1. Try registration style verification (Works for Parents/Managers)
-      const response = await axiosInstance.post(`/auth/signup/verify-otp?phone_number=${currentPhone}&code=${codeClean}`);
-      
+      const response = await axiosInstance.post(
+        `/auth/signup/verify-otp?phone_number=${encodeURIComponent(phone)}&code=${codeClean}`
+      );
+
       if (response.data?.access_token) {
         localStorage.setItem('token', response.data.access_token);
         sessionStorage.setItem('token', response.data.access_token);
+        const role = String(response.data?.role || response.data?.user?.role || '').toLowerCase();
+        localStorage.setItem('user', JSON.stringify({ email, role }));
+        sessionStorage.setItem('user', JSON.stringify({ email, role }));
       }
-      
+
       navigate('/login?registered=success');
-      window.location.reload(); 
+      window.location.reload();
     } catch (err) {
-      console.warn("Signup OTP endpoint failed, trying login verification flow...", err);
-      
-      try {
-        // 2. Try Teacher verification flow. 
-        // If it requires standard auth headers, we provide temporary basic auth fallback or use the stored token if available.
-        const response = await axiosInstance.post(`/auth/phone/verify-code?code=${codeClean}`, {}, {
-          headers: {
-            // In case the backend strictly requires email identity to bind verification session
-            'X-User-Email': email 
-          }
-        });
-        
-        if (response.data?.access_token) {
-          localStorage.setItem('token', response.data.access_token);
-          sessionStorage.setItem('token', response.data.access_token);
-        }
-        
-        navigate('/login?registered=success');
-        window.location.reload();
-      } catch (fallbackErr) {
-        console.error("Both verification endpoints failed:", fallbackErr);
-        setError(fallbackErr.response?.data?.detail || 'Invalid or expired code.');
+      const status = err?.response?.status;
+      const detail = err?.response?.data?.detail || '';
+      console.error('Verification failed:', status, detail);
+
+      if (status === 400 || detail.toLowerCase().includes('invalid') || detail.toLowerCase().includes('expired')) {
+        setError('Invalid or expired verification code. Please go back and sign in again to receive a new code.');
+      } else if (status === 404) {
+        setError('Phone number not found. Please go back and sign in again.');
+      } else {
+        setError(detail || 'Verification failed. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -254,7 +252,8 @@ export default function Login() {
                   <Phone size={32} />
                 </div>
                 <p className="text-xs text-slate-500 px-4">
-                  Enter the 6-digit verification code sent to <span className="font-bold text-brand-500">{email}</span>
+                  Enter the 6-digit verification code sent to{' '}
+                  <span className="font-bold text-brand-500">{email}</span>
                 </p>
               </div>
 
@@ -278,7 +277,7 @@ export default function Login() {
 
               <button
                 type="button"
-                onClick={() => setStep(1)}
+                onClick={() => { setStep(1); setTempToken(''); setVerificationCode(''); }}
                 className="w-full text-brand-500 font-black text-xs uppercase hover:underline text-center"
               >
                 Back to Details
