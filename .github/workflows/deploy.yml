@@ -16,6 +16,17 @@ jobs:
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            export PATH=$PATH:/usr/bin:/usr/local/bin:/root/.nvm/versions/node/$(node -v 2>/dev/null || echo "default")/bin
+            source ~/.bashrc 2>/dev/null || true
             cd Yaqidh
             git pull origin main
-            npx pm2 restart all
+            
+            if command -v pm2 &> /dev/null; then
+              pm2 restart all
+            elif systemctl is-active --quiet yaqidh; then
+              sudo systemctl restart yaqidh
+            elif systemctl is-active --quiet fastapi; then
+              sudo systemctl restart fastapi
+            else
+              echo "Code pulled successfully, manual restart might be needed if not using a service daemon."
+            fi
