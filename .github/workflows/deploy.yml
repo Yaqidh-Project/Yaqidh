@@ -18,4 +18,4 @@ jobs:
           script: |
             cd Yaqidh
             git pull origin main
-            pm2 restart all
+            npx pm2 restart all
