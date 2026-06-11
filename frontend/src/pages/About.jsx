@@ -96,6 +96,51 @@ const methodology = [
   },
 ];
 
+const userGuide = [
+  {
+    step: "1",
+    title: "Create Your Account",
+    description:
+      "Join Yaqidh in seconds by creating your account. Once registration is completed, you'll be automatically redirected to the login page.",
+    icon: Users,
+  },
+  {
+    step: "2",
+    title: "Access Your Dashboard",
+    description:
+      "Sign in securely and access your personalized workspace based on your assigned role.",
+    icon: ShieldCheck,
+  },
+  {
+    step: "3",
+    title: "Set Up Your Environment",
+    description:
+  "Use the Settings page to create zones, connect cameras, and allow nursery managers to assign supervisors to specific areas.",
+    icon: Camera,
+  },
+  {
+    step: "4",
+    title: "Monitor Live Activity",
+    description:
+      "Access the monitoring page to view live camera streams and stay aware of activity across connected zones in real time.",
+    icon: Eye,
+  },
+  {
+    step: "5",
+    title: "Stay Instantly Informed",
+    description:
+      "Receive immediate alerts whenever a fall or violence incident is detected, enabling rapid response when it matters most.",
+    icon: BellRing,
+  },
+  {
+    step: "6",
+    title: "Gain Actionable Insights",
+    description:
+      "Review incident history, analyze safety trends, and generate detailed reports for informed decision-making.",
+    icon: FileBarChart,
+  },
+];
+
 function FloatingBlur({ className }) {
   return (
     <div
@@ -148,6 +193,34 @@ function MethodCard({ icon: Icon, title, description }) {
   );
 }
 
+function UserGuideCard({ step, icon: Icon, title, description }) {
+  return (
+    <div className="group relative h-full overflow-hidden rounded-3xl border border-[#06217e]/10 bg-gradient-to-br from-white via-slate-50 to-[#06217e]/5 p-6 shadow-md transition-all duration-300 hover:-translate-y-2 hover:shadow-xl">
+      <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-[#06217e]/10 transition-all duration-300 group-hover:scale-125" />
+
+      <div className="relative z-10">
+        <div className="mb-5 flex items-center justify-between">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#06217e] text-white text-sm font-black shadow-lg">
+            {step}
+          </div>
+
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-[#06217e] shadow-sm transition-all duration-300 group-hover:bg-[#06217e] group-hover:text-white">
+            <Icon className="h-6 w-6" />
+          </div>
+        </div>
+
+        <h3 className="mb-3 text-lg font-black text-slate-900">
+          {title}
+        </h3>
+
+        <p className="text-sm leading-relaxed text-slate-600">
+          {description}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function About() {
   const scrollToFeatures = () => {
     const section = document.getElementById("features-section");
@@ -158,7 +231,15 @@ export default function About() {
       });
     }
   };
+const scrollToUserGuide = () => {
+  const section = document.getElementById("user-guide-section");
 
+  if (section) {
+    section.scrollIntoView({
+      behavior: "smooth",
+    });
+  }
+};
   const scrollToContact = () => {
     const section = document.getElementById("contact-section");
 
@@ -212,12 +293,20 @@ export default function About() {
                 </button>
 
                 <button
+                  onClick={scrollToUserGuide}
+                  className="group inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-6 py-3 font-semibold text-white backdrop-blur-md transition-all duration-300 hover:bg-white/20"
+                >
+                  <Smartphone className="h-4 w-4" />
+                  User Guide
+                </button>
+
+                <button
                   onClick={scrollToContact}
                   className="rounded-2xl border border-white/20 bg-white/10 px-6 py-3 font-semibold text-white backdrop-blur-md transition-all duration-300 hover:bg-white/20"
                 >
                   Contact Us
                 </button>
-              </div>
+                </div>
 
               {/* DASHBOARD STATISTICS MOCKUP */}
               <div className="mt-10 grid grid-cols-3 gap-3">
@@ -283,6 +372,44 @@ export default function About() {
             </div>
           </div>
         </section>
+
+      {/* USER GUIDE */}
+<section
+  id="user-guide-section"
+  className="relative overflow-hidden rounded-[36px] border border-slate-100 bg-white p-8 shadow-xl md:p-12"
+>
+  <div className="mb-14 text-center">
+  
+
+    <div className="flex flex-col items-center">
+  <span className="text-3xl md:text-4xl font-black text-[#06217e] tracking-tight">
+    Get Started with
+  </span>
+
+  <img
+    src="/Yaqidh-logo.png"
+    alt="Yaqidh Logo"
+    className="h-24 md:h-28 object-contain"
+  />
+</div>
+
+    <p className="mx-auto mt-4 max-w-3xl text-base leading-relaxed text-slate-500">
+      Set up, monitor, detect, and respond with confidence in just a few simple steps!
+    </p>
+  </div>
+
+  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+    {userGuide.map((item) => (
+      <UserGuideCard
+        key={item.step}
+        step={item.step}
+        title={item.title}
+        description={item.description}
+        icon={item.icon}
+      />
+    ))}
+  </div>
+</section>  
 
         {/* The Core Intelligent Engine - Redesigned for Maximum Text Clarity */}
         <div className="bg-white rounded-3xl shadow-md border border-slate-100 p-8 transition-all hover:shadow-xl">
