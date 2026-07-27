@@ -17,6 +17,12 @@
 
 This solution aims to reduce the reliance on continuous manual surveillance, minimize response times to accidents, and provide peace of mind to parents and staff.
 
+## 🎥 Demo Video
+
+See **Yaqidh** in action! Click the thumbnail below to watch the full demo.
+
+[![Watch the Demo](assets/demo-thumbnail.jpg)](https://drive.google.com/file/d/1gR5Adeat6XKeJb-j9T-kjN15vZKI8x94/view?usp=sharing)
+
 ## ✨ Key Features
 
 ### 🤖 AI Detection System
