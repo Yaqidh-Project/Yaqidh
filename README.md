@@ -1,21 +1,24 @@
-# Yaqidh | يـقِــظ
-### Smart Vision System for Safer Childhood Environments
+<div align="center">
+  <img src="assets/Header.PNG" alt="Yaqidh Logo" width="1280" />
+  <h1>Yaqidh | يـقِــظ</h1>
+  <h3>Smart Vision System for Safer Childhood Environments</h3>
 
-![Project Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
-![Version](https://img.shields.io/badge/Version-1.0.0-blue)
-![License](https://img.shields.io/badge/License-Academic-green)
+  <p>
+    <a href="#"><img src="https://img.shields.io/badge/Status-Production%20Ready-brightgreen?style=flat-square" alt="Status"></a>
+    <a href="#"><img src="https://img.shields.io/badge/Version-1.0.0-blue?style=flat-square" alt="Version"></a>
+    <a href="#"><img src="https://img.shields.io/badge/License-Academic-green?style=flat-square" alt="License"></a>
+  </p>
+</div>
+<br />
 
-> **Project ID:** CSAI-471-P1-F09\
-> **Institution:** Umm Al-Qura University - Faculty of Computer and Information Systems\
-> **Department:** Department of Computer Science and Artificial Intelligence
-
----
 
 ## 📖 Overview
 
 **Yaqidh** is a comprehensive AI-powered child safety monitoring system designed for nurseries, daycare centers, and home environments. The system autonomously detects critical incidents specifically **Falls** and **Physical Violence** using YOLO8s ONNX-based models. It provides real-time alerts to caregivers and administrators, drastically reducing response times to emergencies and enhancing overall child safety.
 
 This solution aims to reduce the reliance on continuous manual surveillance, minimize response times to accidents, and provide peace of mind to parents and staff.
+
+---
 
 ## 🎥 Demo Video
 
@@ -73,33 +76,33 @@ See **Yaqidh** in action! Click the thumbnail below to watch the full demo.
 ## 🛠️ Technology Stack
 
 ### Frontend
-* **Framework:** React 19 with Vite
-* **Styling:** Tailwind CSS 4 with custom theming
-* **Routing:** React Router DOM 7
-* **Charts & Visualization:** Recharts
-* **Icons:** Lucide React
-* **Video Handling:** React Webcam for live feeds
+* **Framework:** ![React 19](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black) ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white)
+* **Styling:** ![Tailwind CSS 4](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)
+* **Routing:** ![React Router 7](https://img.shields.io/badge/React_Router-v7-CA4245?style=flat-square&logo=reactrouter&logoColor=white)
+* **Charts & Visualization:** ![Recharts](https://img.shields.io/badge/Recharts-22B5BF?style=flat-square&logo=chartdotjs&logoColor=white)
+* **Icons:** ![Lucide React](https://img.shields.io/badge/Lucide_Icons-F24E1E?style=flat-square&logo=lucide&logoColor=white)
+* **Video Handling:** ![React Webcam](https://img.shields.io/badge/React_Webcam-Live_Feeds-61DAFB?style=flat-square&logo=react&logoColor=black)
 
 ### Backend
-* **Framework:** FastAPI (async-first Python web framework)
-* **Server:** Uvicorn (ASGI server)
-* **Database:** PostgreSQL with SQLAlchemy async ORM
-* **Migrations:** Alembic for schema management
-* **Authentication:** JWT (HS256) with bcrypt password hashing
-* **AI/ML:** ONNX Runtime for model inference
-* **Real-Time Communication:** WebSockets for live notifications
-* **Task Scheduling:** APScheduler for retention cleanup
+* **Framework:** ![FastAPI](https://img.shields.io/badge/FastAPI-Async_First-009688?style=flat-square&logo=fastapi&logoColor=white)
+* **Server:** ![Uvicorn](https://img.shields.io/badge/Uvicorn-ASGI-499848?style=flat-square&logo=python&logoColor=white)
+* **Database:** ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white) ![SQLAlchemy Async](https://img.shields.io/badge/SQLAlchemy-Async_ORM-D71F00?style=flat-square&logo=python&logoColor=white)
+* **Migrations:** ![Alembic](https://img.shields.io/badge/Alembic-Migrations-6C757D?style=flat-square&logo=python&logoColor=white)
+* **Authentication:** ![JWT HS256](https://img.shields.io/badge/JWT-HS256-000000?style=flat-square&logo=jsonwebtokens&logoColor=white) ![bcrypt](https://img.shields.io/badge/bcrypt-Hashing-3776AB?style=flat-square&logo=python&logoColor=white)
+* **AI/ML:** ![ONNX Runtime](https://img.shields.io/badge/ONNX_Runtime-Inference-005CED?style=flat-square&logo=onnx&logoColor=white)
+* **Real-Time Communication:** ![WebSockets](https://img.shields.io/badge/WebSockets-Live_Alerts-25A162?style=flat-square&logo=socketdotio&logoColor=white)
+* **Task Scheduling:** ![APScheduler](https://img.shields.io/badge/APScheduler-Task_Cleanup-3776AB?style=flat-square&logo=python&logoColor=white)
 
 ### AI & Computer Vision
-* **Models:** YOLO8-based ONNX models (fall_detection.onnx, violence_detection.onnx)
-* **Inference Engine:** ONNX Runtime
-* **Preprocessing:** OpenCV for image/video processing
-* **Model Training:** Goggle Colab - view notebooks in `notebooks/`
+* **Models:** ![YOLOv8](https://img.shields.io/badge/YOLOv8-fall__detection.onnx-00FFFF?style=flat-square&logo=ultralytics&logoColor=black) ![YOLOv8](https://img.shields.io/badge/YOLOv8-violence__detection.onnx-00FFFF?style=flat-square&logo=ultralytics&logoColor=black)
+* **Inference Engine:** ![ONNX Runtime](https://img.shields.io/badge/ONNX_Runtime-005CED?style=flat-square&logo=onnx&logoColor=white)
+* **Preprocessing:** ![OpenCV](https://img.shields.io/badge/OpenCV-Image%20%26%20Video-5C3EE8?style=flat-square&logo=opencv&logoColor=white)
+* **Model Training:** ![Google Colab](https://img.shields.io/badge/Google_Colab-Notebooks-F9AB00?style=flat-square&logo=googlecolab&logoColor=white)
 
 ### Infrastructure
-* **Database:** PostgreSQL with async driver (asyncpg)
-* **File Storage:** Local disk storage for incident clips (configurable retention: 30 days)
-* **Deployment:** Docker-ready with environment-based configuration
+* **Database:** ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white) ![asyncpg](https://img.shields.io/badge/asyncpg-Async_Driver-336791?style=flat-square&logo=postgresql&logoColor=white)
+* **File Storage:** ![Local Storage](https://img.shields.io/badge/Local_Storage-30_Day_Retention-4B5563?style=flat-square&logo=files&logoColor=white)
+* **Deployment:** ![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white)
 
 ---
 
