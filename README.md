@@ -341,7 +341,7 @@ Yaqidh/
 ```
 ## 👥 Contributors
 
-We are a team of **Artificial Intelligence students** from **Umm Al-Qura University** dedicated to building safer environments for children through intelligent vision systems.
+We are a team of **Artificial Intelligence graduates** from **Umm Al-Qura University** dedicated to building safer environments for children through intelligent vision systems.
 
 <div align="left">
 
