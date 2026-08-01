@@ -343,10 +343,17 @@ Yaqidh/
 
 We are a team of **Artificial Intelligence students** from **Umm Al-Qura University** dedicated to building safer environments for children through intelligent vision systems.
 
-* **Renad Alharthi** — [![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white)](https://github.com/RenadAlh)
-* **Aliyah Alabdali** — [![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white)](https://github.com/AliyahAlabdali) 
-* **Rahaf Almalki** — [![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white)](https://github.com/RahafAlmalki) 
-* **Rawan Alahmadi** — [![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white)](https://github.com/iiRawanj) 
+<div align="left">
+
+[![Renad Alharthi](https://img.shields.io/badge/Renad_Alharthi-renadalh-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/renadalh)
+
+[![Aliyah Alabdali](https://img.shields.io/badge/Aliyah_Alabdali-AliyahAlabdali-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/AliyahAlabdali)
+
+[![Rahaf Almalki](https://img.shields.io/badge/Rahaf_Almalki-RahafAlmalki-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/RahafAlmalki)
+
+[![Rawan Alahmadi](https://img.shields.io/badge/Rawan%20Alahmadi-iiRawanj-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/iiRawanj)
+
+</div>
 
 ## 📞 Contact Us
 
