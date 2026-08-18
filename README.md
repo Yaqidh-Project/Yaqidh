@@ -351,7 +351,7 @@ We are a team of **Artificial Intelligence graduates** from **Umm Al-Qura Univer
 
 [![Rahaf Almalki](https://img.shields.io/badge/Rahaf_Almalki-RahafAlmalki-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/RahafAlmalki)
 
-[![Rawan Alahmadi](https://img.shields.io/badge/Rawan%20Alahmadi-iiRawanj-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/iiRawanj)
+[![Rawan Alahmadi](https://img.shields.io/badge/Rawan%20Alahmadi-Rawan--Alahmadi-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Rawan-Alahmadi)
 
 </div>
 
