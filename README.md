@@ -1,18 +1,31 @@
 <div align="center">
-  <img src="assets/Header.PNG" alt="Yaqidh Logo" width="1280" />
-  <h1>Yaqidh | يـقِــظ</h1>
-  <h3>Smart Vision System for Safer Childhood Environments</h3>
+
+  <img src="assets/Logo.svg" alt="Yaqidh Logo" width="300" />
+
+  <h3>Safer Childhood Environments Through Intelligent Vision</h3>
 
   <p>
-    <a href="#"><img src="https://img.shields.io/badge/Status-Production%20Ready-brightgreen?style=flat-square" alt="Status"></a>
-    <a href="#"><img src="https://img.shields.io/badge/Version-1.0.0-blue?style=flat-square" alt="Version"></a>
-    <a href="#"><img src="https://img.shields.io/badge/License-Academic-green?style=flat-square" alt="License"></a>
+    An AI-powered child safety monitoring system that detects falls and physical
+    violence in real time, with automated alerts, incident tracking, and reporting.
   </p>
+<br>
+  <p>
+    <a href="#">
+      <img src="https://img.shields.io/badge/Status-Production%20Ready-3F8F78?style=flat-square" alt="Status">
+    </a>
+    <a href="#">
+      <img src="https://img.shields.io/badge/Version-1.0.0-5E77A5?style=flat-square" alt="Version">
+    </a>
+    <a href="#">
+      <img src="https://img.shields.io/badge/License-Academic-3F8F78?style=flat-square" alt="License">
+    </a>
+  </p>
+
 </div>
-<br />
 
 
-## 📖 Overview
+
+## Overview
 
 **Yaqidh** is a comprehensive AI-powered child safety monitoring system designed for nurseries, daycare centers, and home environments. The system autonomously detects critical incidents specifically **Falls** and **Physical Violence** using YOLO8s ONNX-based models. It provides real-time alerts to caregivers and administrators, drastically reducing response times to emergencies and enhancing overall child safety.
 
@@ -20,60 +33,60 @@ This solution aims to reduce the reliance on continuous manual surveillance, min
 
 ---
 
-## 🎥 Demo Video
+## Demo Video
 
 See **Yaqidh** in action! Click the thumbnail below to watch the full demo.
 
 [![Watch the Demo](assets/demo-thumbnail.jpg)](https://drive.google.com/file/d/1gR5Adeat6XKeJb-j9T-kjN15vZKI8x94/view?usp=sharing)
 
-## ✨ Key Features
+## Key Features
 
-### 🤖 AI Detection System
+### AI Detection System
 * **Real-Time Fall Detection** - Identifies falls instantly using YOLO8s ONNX optimized model
 * **Real-Time Violence Detection** - Detects physical violence between children using YOLO8s ONNX optimized model
 * **Confidence-Based Incident Classification** - Categorizes incidents as Critical (≥75% confidence) or Warning (<75%)
 * **Smart Notification Throttling** - Prevents alert spamming with intelligent cooldown mechanisms
 
-### 🎯 Role-Based Dashboard
+### Role-Based Dashboard
 * **Manager Dashboard** - System overview with KPIs, incident summaries, and zone/camera management
 * **Teacher Incident Tracking** - Simplified interface for logging and viewing incidents in assigned zones
 * **Parent Portal** - Access to reports and incident history for their child's assigned zones
 
-### 🔔 Intelligent Alerting
+### Intelligent Alerting
 * **Real-Time WebSocket Notifications** - Instant alerts to connected users via real-time event streaming
 * **Multi-Channel Notifications** - SMS and email alerts for critical incidents
 * **Per-User Notification Preferences** - Customizable notification channels and preferences
 * **Incident Cooldown Management** - Prevents duplicate alerts within cooldown windows (10s for falls, 20s for violence)
 
-### 📊 Comprehensive Incident Management
+### Comprehensive Incident Management
 * **Incident Logging & Storage** - Auto-generated incident records with video clips
 * **Video Clip Archival** - Automatic storage and retrieval of incident footage
 * **Advanced Filtering & Search** - Filter incidents by type, date range, severity, and location
 
-### 📈 Analytics & Reporting
+### Analytics & Reporting
 * **Dashboard Analytics** - Real-time KPIs and trend indicators
 * **Advanced Reports** - Generate customizable reports with date ranges, category filters, and export options
 * **Incident Trend Charts** - Visualize incident patterns over time
 * **Category Breakdown Analysis** - Understand fall vs. violence detection distribution
 
-### 🔐 Authentication & Authorization
+### Authentication & Authorization
 * **JWT-Based Authentication** - Secure access tokens (15-min expiry) and refresh tokens (7-day expiry)
 * **Role-Based Access Control (RBAC)** - Three distinct roles with granular permissions (Manager, Teacher, Parent/Caregiver)
 * **Phone Verification (2FA)** - OTP-based phone verification for enhanced security
 * **Zone-Based Data Isolation** - Users can only access incidents and resources within their assigned zones
 
-### 🎥 Live Monitoring
+### Live Monitoring
 * **Real-Time Video Feed Control** - View live camera streams with power on/off functionality
 * **On-Screen Display (OSD)** - Timestamp, latency, and analysis status overlays
 * **Stream Status Indicators** - Real-time LIVE/STANDBY badges and network quality indicators
 
-### ⚙️ Administration & Configuration
+### Administration & Configuration
 * **User Management** - Create, edit, and manage staff and parent accounts
 * **Zone Management** - Define and organize monitoring zones
 * **Camera Configuration** - Add, edit, and manage camera streams with zone assignments
 * **Notification Preferences** - Configure SMS, email, and push notification settings
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 ### Frontend
 * **Framework:** ![React 19](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black) ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white)
@@ -106,7 +119,7 @@ See **Yaqidh** in action! Click the thumbnail below to watch the full demo.
 
 ---
 
-## 🚀 Installation & Setup
+## Installation & Setup
 
 ### Prerequisites
 
@@ -197,7 +210,7 @@ See **Yaqidh** in action! Click the thumbnail below to watch the full demo.
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```
 Yaqidh/
@@ -339,7 +352,7 @@ Yaqidh/
         ├── requirements.txt
         └── test_realtime_camera.py
 ```
-## 👥 Contributors
+## Contributors
 
 We are a team of **Artificial Intelligence graduates** from **Umm Al-Qura University** dedicated to building safer environments for children through intelligent vision systems.
 
@@ -355,7 +368,7 @@ We are a team of **Artificial Intelligence graduates** from **Umm Al-Qura Univer
 
 </div>
 
-## 📞 Contact Us
+## Contact Us
 
 For any inquiries, feedback, or collaboration opportunities, feel free to reach out to us:
 
