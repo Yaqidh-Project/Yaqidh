@@ -10,16 +10,10 @@
   </p>
 <br>
   <p>
-    <a href="#">
-      <img src="https://img.shields.io/badge/Status-Production%20Ready-3F8F78?style=flat-square" alt="Status">
-    </a>
-    <a href="#">
-      <img src="https://img.shields.io/badge/Version-1.0.0-5E77A5?style=flat-square" alt="Version">
-    </a>
-    <a href="#">
-      <img src="https://img.shields.io/badge/License-Academic-3F8F78?style=flat-square" alt="License">
-    </a>
-  </p>
+  <img src="https://img.shields.io/badge/Status-Production%20Ready-3F8F78?style=flat-square" alt="Status">
+  <img src="https://img.shields.io/badge/Version-1.0.0-5E77A5?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/License-Academic-3F8F78?style=flat-square" alt="License">
+</p>
 
 </div>
 
